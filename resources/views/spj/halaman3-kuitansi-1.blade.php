@@ -1,139 +1,283 @@
 @php
     use Carbon\Carbon;
 
-    /*
-    |--------------------------------------------------------------------------
-    | WAKTU
-    |--------------------------------------------------------------------------
-    */
     $start = $spt->tanggal_berangkat ? Carbon::parse($spt->tanggal_berangkat) : null;
     $end = $spt->tanggal_kembali ? Carbon::parse($spt->tanggal_kembali) : null;
 
     $tglBerangkat = $start ? $start->translatedFormat('d F Y') : '-';
     $tglKembali = $end ? $end->translatedFormat('d F Y') : '-';
-
     $lama = $start && $end ? $start->diffInDays($end) + 1 : 0;
-
     $waktuRingkas = $start && $end ? $tglBerangkat . ' s/d ' . $tglKembali . ' (' . $lama . ' hari)' : '-';
 
-    /*
-    |--------------------------------------------------------------------------
-    | BIAYA (ambil dari array jika ada)
-    |--------------------------------------------------------------------------
-    */
-    $hargaArr = is_array($spt->harga_biaya) ? array_values($spt->harga_biaya) : [];
-    $subtotalHitung = 0;
-
-    foreach ($hargaArr as $h) {
-        $subtotalHitung += (float) preg_replace('/[^0-9]/', '', (string) $h);
-    }
-
-    // subtotal per hari: prioritas kolom subtotal_perhari, fallback hasil hitung array
-    $biayaPerhari = !is_null($spt->subtotal_perhari) ? (float) $spt->subtotal_perhari : (float) $subtotalHitung;
-
-    // total: prioritas total_biaya, fallback lama * biayaPerhari
-    $total = (float) ($spt->total_biaya ?? $lama * $biayaPerhari);
-
-    /*
-    |--------------------------------------------------------------------------
-    | PENERIMA (WAJIB DARI cetak.blade.php)
-    |--------------------------------------------------------------------------
-    */
     $penerima = $penerima ?? $spt->petugasList()->first();
 
     /*
     |--------------------------------------------------------------------------
-    | TERBILANG (AMAN UNTUK INCLUDE BERULANG)
+    | TOTAL SESUAI INPUT BENDAHARA (dari keuangan.detail_petugas)
     |--------------------------------------------------------------------------
     */
-    $terbilang = function ($angka) {
-        $fmt = new NumberFormatter('id', NumberFormatter::SPELLOUT);
-        return ucfirst($fmt->format((int) round($angka))) . ' Rupiah';
+    $detailPetugas = $spt->keuangan->detail_petugas ?? [];
+
+    if (is_string($detailPetugas)) {
+        $decoded = json_decode($detailPetugas, true);
+        $detailPetugas = is_array($decoded) ? $decoded : [];
+    }
+
+    $petugasKey = (string) ($penerima->getKey() ?? '');
+    $petugasNip = (string) ($penerima->nip ?? '');
+
+    $detailUntukPenerima = collect($detailPetugas)->first(function ($item) use ($petugasKey, $petugasNip) {
+        $id = (string) ($item['petugas_id'] ?? '');
+        return $id === $petugasKey || $id === $petugasNip;
+    });
+
+    $total = (float) ($detailUntukPenerima['total_biaya'] ?? 0);
+
+    /*
+    |--------------------------------------------------------------------------
+    | TERBILANG
+    |--------------------------------------------------------------------------
+    */
+    $penyebut = function ($nilai) use (&$penyebut) {
+        $nilai = abs((int) $nilai);
+        $huruf = [
+            '',
+            'satu',
+            'dua',
+            'tiga',
+            'empat',
+            'lima',
+            'enam',
+            'tujuh',
+            'delapan',
+            'sembilan',
+            'sepuluh',
+            'sebelas',
+        ];
+
+        if ($nilai < 12) {
+            return ' ' . $huruf[$nilai];
+        } elseif ($nilai < 20) {
+            return $penyebut($nilai - 10) . ' belas';
+        } elseif ($nilai < 100) {
+            return $penyebut(intval($nilai / 10)) . ' puluh' . $penyebut($nilai % 10);
+        } elseif ($nilai < 200) {
+            return ' seratus' . $penyebut($nilai - 100);
+        } elseif ($nilai < 1000) {
+            return $penyebut(intval($nilai / 100)) . ' ratus' . $penyebut($nilai % 100);
+        } elseif ($nilai < 2000) {
+            return ' seribu' . $penyebut($nilai - 1000);
+        } elseif ($nilai < 1000000) {
+            return $penyebut(intval($nilai / 1000)) . ' ribu' . $penyebut($nilai % 1000);
+        } elseif ($nilai < 1000000000) {
+            return $penyebut(intval($nilai / 1000000)) . ' juta' . $penyebut($nilai % 1000000);
+        } elseif ($nilai < 1000000000000) {
+            return $penyebut(intval($nilai / 1000000000)) . ' miliar' . $penyebut(fmod($nilai, 1000000000));
+        }
+
+        return '';
+    };
+
+    $terbilang = function ($angka) use ($penyebut) {
+        if ((int) round($angka) <= 0) {
+            return '-';
+        }
+
+        $hasil = trim($penyebut((int) round($angka)));
+        return ucfirst($hasil) . ' rupiah';
     };
 
     /*
     |--------------------------------------------------------------------------
-    | TUJUAN (DIRINGKAS & DIGABUNG)
+    | LOGIKA TUJUAN / NARASI
     |--------------------------------------------------------------------------
     */
-    $norm = fn($v) => trim((string) ($v ?? ''));
+    $norm = function ($val) {
+        if (is_array($val)) {
+            return array_values($val);
+        }
 
-    $kt = collect();
-    $lokasi = collect();
+        if (is_string($val)) {
+            $val = trim($val);
+            if ($val === '') {
+                return [];
+            }
 
-    $tujuan = is_array($spt->tujuan) ? array_values($spt->tujuan) : [];
-    $poktan = is_array($spt->poktan_nama) ? array_values($spt->poktan_nama) : [];
-    $kota = is_array($spt->deskripsi_kota) ? array_values($spt->deskripsi_kota) : [];
-    $lain = is_array($spt->deskripsi_lainnya) ? array_values($spt->deskripsi_lainnya) : [];
+            $decoded = json_decode($val, true);
+            if (is_array($decoded)) {
+                return array_values($decoded);
+            }
+
+            $val = str_replace(['|'], ';', $val);
+            return array_values(array_filter(array_map('trim', explode(';', $val))));
+        }
+
+        return [];
+    };
+
+    $tujuan = $norm($spt->tujuan ?? null);
+    $poktanNama = $norm($spt->poktan_nama ?? null);
+    $deskripsiKota = $norm($spt->deskripsi_kota ?? null);
+    $deskripsiLainnya = $norm($spt->deskripsi_lainnya ?? null);
+
+    if (count($tujuan) === 0 && isset($spt->sptTujuan) && $spt->sptTujuan && $spt->sptTujuan->count() > 0) {
+        foreach ($spt->sptTujuan as $row) {
+            $tujuan[] = trim((string) ($row->jenis_tujuan ?? ''));
+            $poktanNama[] = $row->poktan_nama ?? null;
+            $deskripsiKota[] = $row->deskripsi_kota ?? null;
+            $deskripsiLainnya[] = $row->deskripsi_lainnya ?? null;
+        }
+    }
+
+    $keperluanParts = array_values(array_filter(array_map('trim', explode(';', (string) $spt->keperluan))));
+
+    $getKeperluan = function ($i) use ($keperluanParts, $spt) {
+        if (count($keperluanParts) === 0) {
+            return trim((string) $spt->keperluan);
+        }
+        return $keperluanParts[$i] ?? $keperluanParts[0];
+    };
+
+    $ktByKep = [];
+    $kabByKep = [];
+    $lainByKep = [];
+    $order = [];
 
     foreach ($tujuan as $i => $tj) {
-        $tj = $norm($tj);
-        if ($tj === '') {
-            continue;
-        }
+        $tj = trim((string) $tj);
+        $kep = $getKeperluan($i);
 
-        if ($tj === 'kelompok_tani') {
-            $val = $norm($poktan[$i] ?? '');
-            if ($val !== '') {
-                $kt->push('KT. ' . $val);
+        if ($tj === 'kelompok_tani' || $tj === 'poktan') {
+            $namaPoktan = trim((string) ($poktanNama[$i] ?? ''));
+
+            if ($namaPoktan === '') {
+                continue;
             }
+
+            $poktan = \App\Models\Poktan::where('nama_poktan', $namaPoktan)->first();
+
+            $teksPoktan = $poktan
+                ? 'KT. ' . $poktan->nama_poktan . ' Desa ' . $poktan->desa . ' Kecamatan ' . $poktan->kecamatan
+                : 'KT. ' . $namaPoktan;
+
+            if (!isset($ktByKep[$kep])) {
+                $ktByKep[$kep] = [];
+                $order[] = ['type' => 'kt', 'kep' => $kep];
+            }
+
+            $ktByKep[$kep][] = $teksPoktan;
         } elseif ($tj === 'kabupaten_kota') {
-            $val = $norm($kota[$i] ?? '');
-            if ($val !== '') {
-                $lokasi->push($val);
+            $kota = trim((string) ($deskripsiKota[$i] ?? ''));
+            if ($kota === '' || $kota === '-') {
+                continue;
             }
-        } elseif ($tj === 'lainnya') {
-            $val = $norm($lain[$i] ?? '');
-            if ($val !== '') {
-                $lokasi->push($val);
+
+            if (!isset($kabByKep[$kep])) {
+                $kabByKep[$kep] = [];
+                $order[] = ['type' => 'kab', 'kep' => $kep];
             }
+
+            $kabByKep[$kep][] = $kota;
+        } elseif ($tj === 'lainnya' || $tj === 'lain_lain') {
+            $lain = trim((string) ($deskripsiLainnya[$i] ?? ''));
+            if ($lain === '' || $lain === '-') {
+                continue;
+            }
+
+            if (!isset($lainByKep[$kep])) {
+                $lainByKep[$kep] = [];
+                $order[] = ['type' => 'lain', 'kep' => $kep];
+            }
+
+            $lainByKep[$kep][] = $lain;
         }
     }
 
-    $kt = $kt->unique()->values();
-    $lokasi = $lokasi->unique()->values();
-
-    if ($lokasi->count() > 0) {
-        $lokasiUtama = $lokasi->implode(' dan ');
-    } elseif ($kt->count() > 0) {
-        $lokasiUtama = 'Kabupaten Sumenep';
-    } else {
-        $lokasiUtama = '-';
+    $segments = [];
+    foreach ($order as $o) {
+        if ($o['type'] === 'kt') {
+            $kep = $o['kep'];
+            $segments[] = $kep . ' ke ' . implode(' dan ', $ktByKep[$kep]) . ' Kabupaten Sumenep';
+        }
+        if ($o['type'] === 'kab') {
+            $kep = $o['kep'];
+            $segments[] = $kep . ' ke ' . implode(' dan ', $kabByKep[$kep]);
+        }
+        if ($o['type'] === 'lain') {
+            $kep = $o['kep'];
+            $segments[] = $kep . ' ke ' . implode(' dan ', $lainByKep[$kep]);
+        }
     }
 
-    $objek = $kt->count() ? ' di ' . $kt->implode(' dan ') : '';
+    $finalNarasi = trim(implode(' dan ', array_filter($segments)));
+
+    /*
+    |--------------------------------------------------------------------------
+    | PEJABAT DAN BENDAHARA
+    |--------------------------------------------------------------------------
+    */
+    $pejabat = \App\Models\User::where(function ($q) {
+        $q->where('jabatan', 'ketua')->orWhere('role', 'ketua');
+    })->first();
+
+    $bendahara = \App\Models\User::where(function ($q) {
+        $q->where('jabatan', 'bendahara')->orWhere('role', 'bendahara');
+    })->first();
+
+    $namaPejabat = $pejabat?->nama ?? ($pejabat?->name ?? '-');
+    $nipPejabat = $pejabat?->nip ?? '-';
+
+    $namaBendahara = $bendahara?->nama ?? ($bendahara?->name ?? '-');
+    $nipBendahara = $bendahara?->nip ?? '-';
+
+    /*
+    |--------------------------------------------------------------------------
+    | KOTAK KANAN ATAS
+    |--------------------------------------------------------------------------
+    */
+    $nomorBukti = trim((string) ($spt->nomor_kwitansi ?? ''));
+    if ($nomorBukti === '' || $nomorBukti === '-') {
+        $nomorBukti = trim((string) ($spt->keuangan->nomor_kwitansi ?? '-'));
+    }
+
+    $mak = trim((string) ($spt->mak ?? ''));
+    if ($mak === '' || $mak === '-') {
+        $mak = trim((string) ($spt->keuangan->mak ?? '-'));
+    }
+
+    $tahunAnggaran = trim((string) ($spt->tahun ?? ''));
+    if ($tahunAnggaran === '') {
+        $tahunAnggaran = $start ? $start->format('Y') : '-';
+    }
 @endphp
 
 <div class="page">
 
-    <!-- TABEL KANAN ATAS -->
     <div style="width:100%; margin-bottom:25px;">
         <table style="width:45%; margin-left:auto; border-collapse:collapse;" border="1" cellpadding="4">
             <tr>
                 <td style="width:45%;">&nbsp;Tahun Anggaran</td>
-                <td>: {{ $spt->tahun }}</td>
+                <td>: {{ $tahunAnggaran ?: '-' }}</td>
             </tr>
             <tr>
                 <td>&nbsp;Nomor Bukti</td>
-                <td>: {{ $spt->nomor_kwitansi }}</td>
+                <td>: {{ $nomorBukti ?: '-' }}</td>
             </tr>
             <tr>
                 <td>&nbsp;MAK</td>
-                <td>: {{ $spt->mak }}</td>
+                <td>: {{ $mak ?: '-' }}</td>
             </tr>
             <tr>
                 <td>&nbsp;DIPA</td>
-                <td>: -</td>
+                <td>:</td>
             </tr>
         </table>
     </div>
 
-    <!-- JUDUL -->
     <div style="text-align:center; margin:30px 0;">
         <b><u>KUITANSI / BUKTI PEMBAYARAN</u></b>
     </div>
 
-    <!-- ISI -->
     <table style="width:100%; border-collapse:collapse;">
         <tr>
             <td style="width:22%;">Sudah Terima Dari</td>
@@ -147,7 +291,9 @@
         <tr>
             <td>Jumlah Uang</td>
             <td>:</td>
-            <td><b>Rp. {{ number_format($total, 0, ',', '.') }},-</b></td>
+            <td>
+                <b>Rp. {{ $total > 0 ? number_format($total, 0, ',', '.') : '-' }},-</b>
+            </td>
         </tr>
 
         <tr>
@@ -160,145 +306,32 @@
             <td style="vertical-align:top;">Untuk Pembayaran</td>
             <td style="vertical-align:top;">:</td>
             <td style="text-align:justify;">
-                @php
-                    // ====== Narasi sama persis dengan UNTUK (keperluan dipisah ; lalu digabung dan) ======
-                    $norm = function ($val) {
-                        if (is_array($val)) {
-                            return $val;
-                        }
-
-                        if (is_string($val)) {
-                            $val = trim($val);
-                            if ($val === '') {
-                                return [];
-                            }
-
-                            $decoded = json_decode($val, true);
-                            if (is_array($decoded)) {
-                                return $decoded;
-                            }
-
-                            $val = str_replace(['|'], ';', $val);
-                            return array_values(array_filter(array_map('trim', explode(';', $val))));
-                        }
-
-                        return [];
-                    };
-
-                    $tujuan = $norm($spt->tujuan);
-                    $poktanNama = $norm($spt->poktan_nama);
-                    $deskripsiKota = $norm($spt->deskripsi_kota);
-                    $deskripsiLainnya = $norm($spt->deskripsi_lainnya);
-
-                    $keperluanParts = array_values(
-                        array_filter(array_map('trim', explode(';', (string) $spt->keperluan))),
-                    );
-                    $getKeperluan = function ($i) use ($keperluanParts, $spt) {
-                        if (count($keperluanParts) === 0) {
-                            return (string) $spt->keperluan;
-                        }
-                        return $keperluanParts[$i] ?? $keperluanParts[0];
-                    };
-
-                    $ktByKep = [];
-                    $kabByKep = [];
-                    $order = [];
-
-                    foreach ($tujuan as $i => $tj) {
-                        $kep = $getKeperluan($i);
-
-                        if ($tj === 'kelompok_tani') {
-                            $namaPoktan = $poktanNama[$i] ?? null;
-
-                            $poktan = $namaPoktan
-                                ? \App\Models\Poktan::where('nama_poktan', $namaPoktan)->first()
-                                : null;
-
-                            if ($poktan) {
-                                if (!isset($ktByKep[$kep])) {
-                                    $ktByKep[$kep] = [];
-                                    $order[] = ['type' => 'kt', 'kep' => $kep];
-                                }
-
-                                $ktByKep[$kep][] =
-                                    'KT. ' .
-                                    $poktan->nama_poktan .
-                                    ' Desa ' .
-                                    $poktan->desa .
-                                    ' Kecamatan ' .
-                                    $poktan->kecamatan;
-                            }
-                        } elseif ($tj === 'kabupaten_kota') {
-                            $kota = trim((string) ($deskripsiKota[$i] ?? ''));
-                            if ($kota !== '' && $kota !== '-') {
-                                if (!isset($kabByKep[$kep])) {
-                                    $kabByKep[$kep] = [];
-                                    $order[] = ['type' => 'kab', 'kep' => $kep];
-                                }
-                                $kabByKep[$kep][] = $kota;
-                            }
-                        } elseif ($tj === 'lainnya') {
-                            $lain = trim((string) ($deskripsiLainnya[$i] ?? ''));
-                            if ($lain !== '' && $lain !== '-') {
-                                $order[] = ['type' => 'lain', 'val' => $lain];
-                            }
-                        }
-                    }
-
-                    $segments = [];
-                    foreach ($order as $o) {
-                        if ($o['type'] === 'kt') {
-                            $kep = $o['kep'];
-                            $segments[] = $kep . ' ke ' . implode(' dan ', $ktByKep[$kep]) . ' Kabupaten Sumenep';
-                        }
-                        if ($o['type'] === 'kab') {
-                            $kep = $o['kep'];
-                            $segments[] = $kep . ' ke ' . implode(' dan ', $kabByKep[$kep]);
-                        }
-                        if ($o['type'] === 'lain') {
-                            $segments[] = $o['val'];
-                        }
-                    }
-
-                    $finalNarasi = trim(implode(' dan ', $segments));
-                @endphp
-
-                Biaya bantuan untuk melaksanakan kegiatan
-                {{ $finalNarasi }}
-                pada {{ $waktuRingkas }},
-                sesuai SPT Nomor : {{ $spt->nomor_surat }}
-                dan SPD terkait, dengan perincian terlampir.
+                @if ($finalNarasi !== '')
+                    Biaya bantuan untuk melaksanakan kegiatan
+                    {{ $finalNarasi }}
+                    pada {{ $waktuRingkas }},
+                    sesuai SPT Nomor : {{ $spt->nomor_surat }}
+                    dan SPD terkait, dengan perincian terlampir.
+                @else
+                    Biaya bantuan untuk melaksanakan kegiatan
+                    {{ trim((string) $spt->keperluan) !== '' ? $spt->keperluan : '-' }}
+                    pada {{ $waktuRingkas }},
+                    sesuai SPT Nomor : {{ $spt->nomor_surat }}
+                    dan SPD terkait, dengan perincian terlampir.
+                @endif
             </td>
         </tr>
-
     </table>
 
-    <!-- TTD ATAS -->
     <div style="width:100%; margin-top:40px; text-align:right;">
         Sumenep, {{ now()->translatedFormat('d F Y') }}<br>
         Yang Menerima
     </div>
 
-    <!-- NAMA PENERIMA -->
     <div style="width:100%; margin-top:70px; text-align:right;">
         <b>{{ strtoupper($penerima->nama ?? '-') }}</b><br>
         NIP. {{ $penerima->nip ?? '-' }}
     </div>
-
-    <!-- TTD BAWAH -->
-    @php
-        $user = $user ?? auth()->user();
-
-        // Pejabat
-        $namaPejabat = $user->nama ?? ($user->name ?? '-');
-        $nipPejabat = $user->nip ?? '-';
-        $jabatanPejabat = $user->jabatan ?? 'Pejabat Pembuat Komitmen';
-
-        // Bendahara
-        $namaBendahara = $user->bendahara_nama ?? '-';
-        $nipBendahara = $user->bendahara_nip ?? '-';
-        $jabatanBendahara = $user->bendahara_jabatan ?? 'Bendahara';
-    @endphp
 
     <table style="width:100%; margin-top:50px;">
         <tr>
@@ -306,16 +339,22 @@
                 Setuju dibayar,<br>
                 An. Kuasa Pengguna Anggaran<br>
                 Pejabat Pembuat Komitmen<br>
-                <div class="nama">{{ strtoupper($namaPejabat) }}</div>
-                <div class="nip" style="white-space: pre;">NIP. {{ $nipPejabat }}</div>
-
-
+                <br><br><br>
+                <div style="margin-top:20px;">
+                    <b>{{ strtoupper($namaPejabat) }}</b>
+                </div>
+                <div style="white-space: pre;">NIP. {{ $nipPejabat }}</div>
             </td>
-            <td style="width:50%; vertical-align:top; text-align:right;"><br>
+
+            <td style="width:50%; vertical-align:top; text-align:right;">
+                <br>
                 Lunas dibayar, Tgl........................................<br>
                 Bendahara Pengeluaran<br>
-                <div class="nama">{{ strtoupper($namaBendahara) }}</div>
-                <div class="nip" style="white-space: pre;">NIP. {{ $nipBendahara }}</div>
+                <br><br><br>
+                <div style="margin-top:20px;">
+                    <b>{{ strtoupper($namaBendahara) }}</b>
+                </div>
+                <div style="white-space: pre;">NIP. {{ $nipBendahara }}</div>
             </td>
         </tr>
     </table>

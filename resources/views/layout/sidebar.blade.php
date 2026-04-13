@@ -3,97 +3,128 @@
         background: linear-gradient(180deg, #0b3d2e 0%, #0f5a3f 55%, #147a52 100%);
         border-top-right-radius: 18px;
         border-bottom-right-radius: 18px;
+        min-height: 100vh;
     ">
 
-    <!-- Sidebar - Brand -->
-    <a class="sidebar-brand d-flex flex-column align-items-center justify-content-center" href="{{ url('index') }}"
-        style="margin-top: 18px; padding-bottom: 16px;">
+    <!-- BRAND -->
+    <a class="sidebar-brand d-flex flex-column align-items-center justify-content-center" href="{{ route('home') }}"
+        style="margin-top: 18px; padding-bottom: 16px; text-decoration: none;">
 
-        <img src="{{ asset('img/sumenep.png') }}" alt="Logo Instansi" style="height: 34px;">
+        <img src="{{ asset('img/sumenep.png') }}" alt="Logo" style="height: 42px;">
 
-        <div class="sidebar-brand-text text-white fw-semibold text-center"
-            style="font-size: 0.9rem; margin-top: 6px; line-height: 1.3;">
+        <div class="sidebar-brand-text text-white text-center mt-2">
             SIPEDIN
-            <div style="font-size: 0.7rem; font-weight: 400; opacity: 0.9;">
+            <div style="font-size: 0.7rem; opacity: 0.9;">
                 Sistem Informasi Perintah Dinas
             </div>
         </div>
     </a>
+
     <br>
     <hr class="sidebar-divider my-0">
 
-    <!-- Dashboard -->
-    <li class="nav-item {{ request()->is('index') ? 'active' : '' }}">
-        <a class="nav-link text-white {{ request()->is('index') ? 'is-active' : '' }}" href="{{ url('index') }}">
-            <i class="fas fa-fw fa-tachometer-alt"></i>
+    <!-- DASHBOARD -->
+    <li class="nav-item {{ request()->routeIs('home') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('home') ? 'is-active' : '' }}" href="{{ route('home') }}">
+            <i class="fas fa-tachometer-alt"></i>
             <span>Dashboard</span>
         </a>
     </li>
 
     <hr class="sidebar-divider">
 
-    <!-- Persuratan -->
-    <div class="sidebar-heading">
-        Persuratan
-    </div>
+    <!-- ================= PERSURATAN ================= -->
+    <div class="sidebar-heading text-white-50">Persuratan</div>
 
-    <li class="nav-item {{ request()->is('spt*') ? 'active' : '' }}">
-        <a class="nav-link text-white {{ request()->is('spt*') ? 'is-active' : '' }}" href="{{ url('spt') }}">
-            <i class="fas fa-fw fa-file-alt"></i>
-            <span>Surat Perintah Tugas</span>
+    <li class="nav-item {{ request()->routeIs('spt.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('spt.*') ? 'is-active' : '' }}"
+            href="{{ route('spt.index') }}">
+            <i class="fas fa-file-signature"></i>
+            <span>S P T</span>
         </a>
     </li>
 
-    <li class="nav-item {{ request()->is('rekap-surat-keluar*') ? 'active' : '' }}">
-        <a class="nav-link text-white {{ request()->is('rekap-surat-keluar*') ? 'is-active' : '' }}"
+    <li class="nav-item {{ request()->routeIs('rekap-surat-keluar.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('rekap-surat-keluar.*') ? 'is-active' : '' }}"
             href="{{ route('rekap-surat-keluar.index') }}">
-            <i class="fas fa-fw fa-clipboard-list"></i>
+            <i class="fas fa-clipboard-list"></i>
             <span>Rekap Surat Keluar</span>
         </a>
     </li>
 
     <hr class="sidebar-divider">
 
-    <!-- Master Data -->
-    <div class="sidebar-heading">
-        Master Data
-    </div>
+    <!-- ================= ANGGARAN ================= -->
+    <div class="sidebar-heading text-white-50">Anggaran</div>
 
-    <!-- Database -->
-    <li class="nav-item">
-        <a class="nav-link text-white collapsed" href="#" data-toggle="collapse" data-target="#collapseDatabase"
-            aria-expanded="true" aria-controls="collapseDatabase">
-            <i class="fas fa-fw fa-database"></i>
-            <span>Basis Data</span>
+    <li class="nav-item {{ request()->routeIs('keuangan.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('keuangan.*') ? 'is-active' : '' }}"
+            href="{{ route('keuangan.index') }}">
+            <i class="fas fa-wallet"></i>
+            <span>Keuangan SPT</span>
         </a>
-
-        <div id="collapseDatabase"
-            class="collapse {{ request()->is('petugas*') || request()->is('poktan*') ? 'show' : '' }}"
-            data-parent="#accordionSidebar">
-
-            <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item {{ request()->is('petugas*') ? 'active' : '' }}" href="{{ url('petugas') }}">
-                    Data Petugas
-                </a>
-                <a class="collapse-item {{ request()->is('poktan*') ? 'active' : '' }}" href="{{ url('poktan') }}">
-                    Data Poktan
-                </a>
-            </div>
-        </div>
     </li>
 
-    <!-- Import -->
-    <li class="nav-item {{ request()->is('import*') ? 'active' : '' }}">
-        <a class="nav-link text-white {{ request()->is('import*') ? 'is-active' : '' }}"
+    <li class="nav-item {{ request()->routeIs('dana-masuk.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('dana-masuk.*') ? 'is-active' : '' }}"
+            href="{{ route('dana-masuk.index') }}">
+            <i class="fas fa-money-check-alt"></i>
+            <span>Dana Masuk</span>
+        </a>
+    </li>
+
+    <li class="nav-item {{ request()->routeIs('rekap-anggaran.*') ? 'active' : '' }}">
+        <a class="nav-link" href="{{ route('rekap-anggaran.index') }}">
+            <i class="fas fa-wallet"></i>
+            <span>Rekap Anggaran</span>
+        </a>
+    </li>
+
+    <hr class="sidebar-divider">
+
+    <!-- ================= MASTER DATA ================= -->
+    <div class="sidebar-heading text-white-50">Master Data</div>
+
+    <li class="nav-item {{ request()->routeIs('petugas.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('petugas.*') ? 'is-active' : '' }}"
+            href="{{ route('petugas.index') }}">
+            <i class="fas fa-users"></i>
+            <span>Petugas</span>
+        </a>
+    </li>
+
+    <li class="nav-item {{ request()->routeIs('poktan.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('poktan.*') ? 'is-active' : '' }}"
+            href="{{ route('poktan.index') }}">
+            <i class="fas fa-layer-group"></i>
+            <span>Poktan</span>
+        </a>
+    </li>
+
+    <hr class="sidebar-divider">
+
+    <!-- ================= UTILITAS ================= -->
+    <div class="sidebar-heading text-white-50">Utilitas</div>
+
+    <li class="nav-item {{ request()->routeIs('import.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('import.*') ? 'is-active' : '' }}"
             href="{{ route('import.index') }}">
             <i class="fas fa-file-import"></i>
-            <span>Import Data</span>
+            <span>Import & Export</span>
+        </a>
+    </li>
+
+    <li class="nav-item {{ request()->routeIs('profile.*') ? 'active' : '' }}">
+        <a class="nav-link text-white {{ request()->routeIs('profile.*') ? 'is-active' : '' }}"
+            href="{{ route('profile.edit') }}">
+            <i class="fas fa-user-cog"></i>
+            <span>Profil</span>
         </a>
     </li>
 
     <hr class="sidebar-divider d-none d-md-block">
 
-    <!-- Sidebar Toggler -->
+    <!-- TOGGLE -->
     <div class="text-center d-none d-md-inline pb-3">
         <button class="rounded-circle border-0" id="sidebarToggle"></button>
     </div>

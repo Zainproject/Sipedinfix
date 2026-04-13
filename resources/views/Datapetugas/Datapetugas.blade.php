@@ -2,14 +2,11 @@
 
 @section('main')
     <div id="content">
-        <!-- Begin Page Content -->
         <div class="container-fluid">
 
-            <!-- Page Heading -->
             <h1 class="h3 mb-2 text-gray-800">Data Petugas</h1>
-            <p class="mb-4">Data Petugas</p>
+            <p class="mb-4">Daftar data petugas sesuai rancangan sistem SPT.</p>
 
-            <!-- DataTales Example -->
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary">Data Petugas</h6>
@@ -24,24 +21,25 @@
 
                 <div class="card-body">
                     @if (session('success'))
-                        <div class="alert alert-success">{{ session('success') }}</div>
+                        <div class="alert alert-success">
+                            {{ session('success') }}
+                        </div>
                     @endif
 
                     <div class="table-responsive">
-                        {{-- Pakai id dataTable biar SB Admin/DataTables otomatis rapi --}}
-                        <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                        <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
                             <thead class="thead-light">
                                 <tr>
-                                    <th style="width:70px;">No</th>
+                                    <th style="width: 70px;">No</th>
                                     <th>Nama</th>
-                                    <th style="width:180px;">NIP</th>
-                                    <th>Pangkat/Gol</th>
+                                    <th style="width: 180px;">NIP</th>
+                                    <th>Pangkat</th>
                                     <th>Jabatan</th>
-                                    <th style="width:170px;">Aksi</th>
+                                    <th style="width: 170px;">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($petugas as $item)
+                                @forelse ($petugas as $item)
                                     <tr>
                                         <td>{{ $loop->iteration }}</td>
                                         <td>{{ $item->nama }}</td>
@@ -49,34 +47,33 @@
                                         <td>{{ $item->pangkat }}</td>
                                         <td>{{ $item->jabatan }}</td>
                                         <td>
-                                            <!-- Tombol Edit -->
-                                            <a href="{{ route('petugas.edit', $item) }}" class="btn btn-warning btn-sm">
+                                            <a href="{{ route('petugas.edit', $item->nip) }}"
+                                                class="btn btn-warning btn-sm">
                                                 <i class="fas fa-edit"></i> Edit
                                             </a>
 
-                                            <!-- Tombol Hapus -->
-                                            <form action="{{ route('petugas.destroy', $item) }}" method="POST"
-                                                style="display:inline-block;">
+                                            <form action="{{ route('petugas.destroy', $item->nip) }}" method="POST"
+                                                style="display:inline-block;"
+                                                onsubmit="return confirm('Yakin ingin menghapus data petugas ini?')">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn btn-danger btn-sm"
-                                                    onclick="return confirm('Yakin ingin menghapus?')">
+                                                <button type="submit" class="btn btn-danger btn-sm">
                                                     <i class="fas fa-trash"></i> Hapus
                                                 </button>
                                             </form>
                                         </td>
                                     </tr>
-                                @endforeach
+                                @empty
+                                    <tr>
+                                        <td colspan="6" class="text-center">Data petugas belum tersedia.</td>
+                                    </tr>
+                                @endforelse
                             </tbody>
                         </table>
-
-                        {{-- PENTING: JANGAN tampilkan pagination Laravel --}}
-                        {{-- {{ $petugas->links() }} --}}
                     </div>
                 </div>
             </div>
 
         </div>
-        <!-- /.container-fluid -->
     </div>
 @endsection

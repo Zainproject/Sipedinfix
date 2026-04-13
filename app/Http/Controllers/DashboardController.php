@@ -2,72 +2,111 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Spt;
+use App\Models\DanaMasuk;
 use App\Models\Petugas;
 use App\Models\Poktan;
+use App\Models\Spt;
+use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
     public function index()
     {
-        $now = now();
+        $now = Carbon::now();
+        $today = $now->toDateString();
         $bulanIni = (int) $now->month;
         $tahunIni = (int) $now->year;
 
-        // =========================
-        // KARTU DASHBOARD
-        // =========================
+        /*
+        |--------------------------------------------------------------------------
+        | KARTU DASHBOARD
+        |--------------------------------------------------------------------------
+        */
 
         // SPT bulan ini
-        $jumlahSptBulanIni = Spt::where('bulan', $bulanIni)
+        $jumlahSptBulanIni = Spt::query()
+            ->where('bulan', $bulanIni)
             ->where('tahun', $tahunIni)
             ->count();
 
-        // Total biaya bulan ini
-        $totalBiayaBulanIni = (int) Spt::where('bulan', $bulanIni)
+        // Total biaya bulan ini dari relasi keuangan
+        $totalBiayaBulanIni = Spt::query()
+            ->with('keuangan')
+            ->where('bulan', $bulanIni)
             ->where('tahun', $tahunIni)
-            ->sum('total_biaya');
+            ->whereHas('keuangan')
+            ->get()
+            ->sum(function ($spt) {
+                return (float) optional($spt->keuangan)->total_biaya;
+            });
 
-        // SPT sedang berjalan hari ini (range tanggal)
-        $sptBerjalan = Spt::whereDate('tanggal_berangkat', '<=', $now->toDateString())
-            ->whereDate('tanggal_kembali', '>=', $now->toDateString())
-            ->get(['petugas']);
+        // SPT sedang berjalan hari ini
+        $sptBerjalan = Spt::query()
+            ->with('petugasRel')
+            ->whereDate('tanggal_berangkat', '<=', $today)
+            ->whereDate('tanggal_kembali', '>=', $today)
+            ->get();
 
         $jumlahSptBerjalan = $sptBerjalan->count();
 
-        // Hitung petugas yang sedang bertugas (unique NIP dari JSON petugas)
-        $nipBerangkat = [];
-        foreach ($sptBerjalan as $row) {
-            $arr = is_array($row->petugas) ? $row->petugas : (json_decode($row->petugas, true) ?: []);
-            foreach ($arr as $nip) {
-                $nip = (string) $nip;
-                if ($nip !== '') {
-                    $nipBerangkat[$nip] = true;
-                }
-            }
-        }
-        $jumlahPetugasBerangkat = count($nipBerangkat);
+        // Petugas yang sedang bertugas hari ini
+        $jumlahPetugasBerangkat = $sptBerjalan
+            ->flatMap(function ($spt) {
+                return $spt->petugasRel->pluck('nip');
+            })
+            ->filter()
+            ->unique()
+            ->count();
 
         // Master data
         $jumlahPetugas = Petugas::count();
-        $jumlahPoktan  = Poktan::count();
+        $jumlahPoktan = Poktan::count();
 
-        // =========================
-        // GRAFIK 1: BIAYA PER BULAN (JAN–DES) TAHUN INI
-        // =========================
-        $biayaPerBulan = Spt::selectRaw('bulan, COALESCE(SUM(total_biaya),0) as total')
+        /*
+        |--------------------------------------------------------------------------
+        | ANGGARAN TAHUN INI
+        |--------------------------------------------------------------------------
+        */
+
+        // Pagu anggaran tahun ini dari dana masuk
+        // Kalau tabel dana_masuk pakai kolom tanggal selain created_at, ganti di sini.
+        $paguAnggaranTahunIni = (float) DanaMasuk::query()
+            ->whereYear('created_at', $tahunIni)
+            ->sum('nominal');
+
+        // Realisasi anggaran tahun ini dari keuangan SPT
+        $realisasiAnggaranTahunIni = Spt::query()
+            ->with('keuangan')
             ->where('tahun', $tahunIni)
-            ->whereNotNull('bulan')
-            ->groupBy('bulan')
-            ->orderBy('bulan')
+            ->whereHas('keuangan')
             ->get()
-            ->keyBy('bulan');
+            ->sum(function ($spt) {
+                return (float) optional($spt->keuangan)->total_biaya;
+            });
+
+        $sisaAnggaranTahunIni = $paguAnggaranTahunIni - $realisasiAnggaranTahunIni;
+
+        /*
+        |--------------------------------------------------------------------------
+        | GRAFIK 1: BIAYA PER BULAN (JAN–DES) TAHUN INI
+        |--------------------------------------------------------------------------
+        */
 
         $labelBulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-        $dataBiayaBulanan = [];
+        $dataBiayaBulanan = array_fill(0, 12, 0);
 
-        for ($m = 1; $m <= 12; $m++) {
-            $dataBiayaBulanan[] = (int) ($biayaPerBulan[$m]->total ?? 0);
+        $sptTahunan = Spt::query()
+            ->with('keuangan')
+            ->where('tahun', $tahunIni)
+            ->whereHas('keuangan')
+            ->get();
+
+        foreach ($sptTahunan as $spt) {
+            $bulan = (int) ($spt->bulan ?? 0);
+
+            if ($bulan >= 1 && $bulan <= 12) {
+                $dataBiayaBulanan[$bulan - 1] += (float) optional($spt->keuangan)->total_biaya;
+            }
         }
 
         $chartBiayaBulanan = [
@@ -76,23 +115,52 @@ class DashboardController extends Controller
             'tahun'  => $tahunIni,
         ];
 
-        // =========================
-        // GRAFIK 2: STATUS SPT (SELESAI vs BELUM)
-        // - selesai: tanggal_kembali < hari ini
-        // - belum:   tanggal_kembali >= hari ini
-        // =========================
-        $sptSelesai = Spt::whereDate('tanggal_kembali', '<', $now->toDateString())->count();
-        $sptBelum   = Spt::whereDate('tanggal_kembali', '>=', $now->toDateString())->count();
+        /*
+        |--------------------------------------------------------------------------
+        | GRAFIK 2: STATUS PENCAIRAN SPT
+        |--------------------------------------------------------------------------
+        */
+
+        $sptBerkeuangan = Spt::query()
+            ->whereHas('keuangan');
+
+        $statusBelumCair = (clone $sptBerkeuangan)
+            ->where(function ($q) {
+                $q->whereNull('status_pencairan')
+                    ->orWhere('status_pencairan', '')
+                    ->orWhere('status_pencairan', 'belum cair');
+            })
+            ->count();
+
+        $statusSudahDicairkan = (clone $sptBerkeuangan)
+            ->where('status_pencairan', 'sudah dicairkan')
+            ->count();
+
+        $statusSelesai = (clone $sptBerkeuangan)
+            ->where('status_pencairan', 'selesai')
+            ->count();
 
         $chartStatus = [
-            'labels' => ['SPT Selesai', 'SPT Belum Selesai'],
-            'data'   => [(int) $sptSelesai, (int) $sptBelum],
+            'labels' => ['Belum Cair', 'Sudah Dicairkan', 'Selesai'],
+            'data'   => [
+                (int) $statusBelumCair,
+                (int) $statusSudahDicairkan,
+                (int) $statusSelesai,
+            ],
         ];
 
-        // =========================
-        // RETURN VIEW
-        // =========================
-        return view('layout.main', compact(
+        /*
+        |--------------------------------------------------------------------------
+        | RETURN VIEW
+        |--------------------------------------------------------------------------
+        |
+        | Sesuaikan dengan file blade dashboard yang kamu pakai.
+        | Jika file kamu memang resources/views/dashboard/index.blade.php
+        | maka pakai 'dashboard.index'
+        |--------------------------------------------------------------------------
+        */
+
+        return view('dashboard.index', compact(
             'jumlahSptBulanIni',
             'totalBiayaBulanIni',
             'jumlahSptBerjalan',
@@ -100,7 +168,10 @@ class DashboardController extends Controller
             'jumlahPetugas',
             'jumlahPoktan',
             'chartBiayaBulanan',
-            'chartStatus'
+            'chartStatus',
+            'paguAnggaranTahunIni',
+            'realisasiAnggaranTahunIni',
+            'sisaAnggaranTahunIni'
         ));
     }
 }

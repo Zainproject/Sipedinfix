@@ -12,7 +12,6 @@ class SearchController extends Controller
 {
     public function index(Request $request)
     {
-        // Halaman awal: tidak tampilkan tabel, hanya UI search
         return view('search.index');
     }
 
@@ -20,7 +19,6 @@ class SearchController extends Controller
     {
         $q = trim((string) $request->get('q', ''));
 
-        // Biar tidak berat: minimal 2 karakter (ubah sesuai kebutuhan)
         if (mb_strlen($q) < 2) {
             return response()->json([
                 'q' => $q,
@@ -31,11 +29,16 @@ class SearchController extends Controller
         }
 
         $limit = (int) $request->get('limit', 200);
-        $limit = max(10, min($limit, 500)); // batasi biar aman
+        $limit = max(10, min($limit, 500));
 
-        /**
-         * 1) PETUGAS
-         */
+        // taruh di sini supaya scope-nya aman untuk seluruh method
+        $possibleKetuaCols = ['ketua', 'ketua_poktan', 'nama_ketua', 'ketua_nama'];
+
+        /*
+        |--------------------------------------------------------------------------
+        | 1) PETUGAS
+        |--------------------------------------------------------------------------
+        */
         $petugasQuery = Petugas::query()
             ->where('nama', 'like', "%{$q}%");
 
@@ -43,28 +46,37 @@ class SearchController extends Controller
             $petugasQuery->orWhere('nip', 'like', "%{$q}%");
         }
 
-        $petugas = $petugasQuery->latest()->limit(50)->get();
+        $petugas = $petugasQuery
+            ->latest()
+            ->limit(50)
+            ->get();
 
-        /**
-         * 2) POKTAN (tanpa kabupaten_kota)
-         */
+        /*
+        |--------------------------------------------------------------------------
+        | 2) POKTAN
+        |--------------------------------------------------------------------------
+        */
         $poktanQuery = Poktan::query()
             ->where('nama_poktan', 'like', "%{$q}%")
             ->orWhere('desa', 'like', "%{$q}%")
             ->orWhere('kecamatan', 'like', "%{$q}%");
 
-        $possibleKetuaCols = ['ketua', 'ketua_poktan', 'nama_ketua', 'ketua_nama'];
         foreach ($possibleKetuaCols as $col) {
             if (Schema::hasColumn('poktan', $col)) {
                 $poktanQuery->orWhere($col, 'like', "%{$q}%");
             }
         }
 
-        $poktan = $poktanQuery->latest()->limit(50)->get();
+        $poktan = $poktanQuery
+            ->latest()
+            ->limit(50)
+            ->get();
 
-        /**
-         * 3) Tujuan keywords
-         */
+        /*
+        |--------------------------------------------------------------------------
+        | 3) KEYWORD TUJUAN
+        |--------------------------------------------------------------------------
+        */
         $qLower = mb_strtolower($q);
         $tujuanKeys = [];
 
@@ -72,70 +84,135 @@ class SearchController extends Controller
             $tujuanKeys[] = 'kabupaten_kota';
         }
 
-        if (str_contains($qLower, 'poktan') || str_contains($qLower, 'kelompok tani') || str_contains($qLower, 'tani')) {
-            $tujuanKeys[] = 'kelompok_tani';
+        if (
+            str_contains($qLower, 'poktan') ||
+            str_contains($qLower, 'kelompok tani') ||
+            str_contains($qLower, 'tani')
+        ) {
+            $tujuanKeys[] = 'poktan';
         }
 
-        /**
-         * 4) SPT query (pakai limit & select kolom penting saja biar cepat)
-         */
+        if (str_contains($qLower, 'lain') || str_contains($qLower, 'lain-lain')) {
+            $tujuanKeys[] = 'lain_lain';
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 4) SPT (STRUKTUR BARU)
+        |--------------------------------------------------------------------------
+        */
         $sptQuery = Spt::query()
-            ->select([
-                'id',
-                'nomor_surat',
-                'nomor_kwitansi',
-                'tahun',
-                'bulan',
-                'keperluan',
-                'tanggal_berangkat',
-                'tanggal_kembali',
-                'total_biaya',
-                'petugas',
-                'poktan_nama',
-                'tujuan',
-                'created_at',
+            ->with([
+                'petugasRel:nip,nama',
+                'sptTujuan:id,spt_id,jenis_tujuan,poktan_nama,deskripsi_kota,deskripsi_lainnya',
+                'sptTujuan.poktan',
+                'keuangan:id,spt_id,mak,nomor_kwitansi,total_biaya',
             ])
-            ->where(function ($w) use ($q) {
+            ->where(function ($w) use ($q, $petugas, $poktan, $tujuanKeys, $possibleKetuaCols) {
                 $w->where('nomor_surat', 'like', "%{$q}%")
-                    ->orWhere('nomor_kwitansi', 'like', "%{$q}%")
-                    ->orWhere('keperluan', 'like', "%{$q}%");
-            });
+                    ->orWhere('keperluan', 'like', "%{$q}%")
+                    ->orWhere('status_bendahara', 'like', "%{$q}%")
+                    ->orWhere('status_pencairan', 'like', "%{$q}%")
+                    ->orWhereHas('keuangan', function ($q2) use ($q) {
+                        $q2->where('nomor_kwitansi', 'like', "%{$q}%")
+                            ->orWhere('mak', 'like', "%{$q}%");
+                    })
+                    ->orWhereHas('petugasRel', function ($q3) use ($q) {
+                        $q3->where('nama', 'like', "%{$q}%")
+                            ->orWhere('nip', 'like', "%{$q}%");
+                    })
+                    ->orWhereHas('sptTujuan', function ($q4) use ($q, $tujuanKeys) {
+                        $q4->where('poktan_nama', 'like', "%{$q}%")
+                            ->orWhere('deskripsi_kota', 'like', "%{$q}%")
+                            ->orWhere('deskripsi_lainnya', 'like', "%{$q}%");
 
-        if (!empty($tujuanKeys)) {
-            $sptQuery->orWhere(function ($w) use ($tujuanKeys) {
-                foreach ($tujuanKeys as $key) {
-                    $w->orWhere('tujuan', 'like', '%"' . $key . '"%');
-                }
-            });
-        }
-
-        if ($petugas->isNotEmpty()) {
-            $sptQuery->orWhere(function ($w) use ($petugas) {
-                foreach ($petugas as $p) {
-                    if (!empty($p->nama)) $w->orWhere('petugas', 'like', "%{$p->nama}%");
-                    if (isset($p->nip) && !empty($p->nip)) $w->orWhere('petugas', 'like', "%{$p->nip}%");
-                }
-            });
-        }
-
-        if ($poktan->isNotEmpty()) {
-            $sptQuery->orWhere(function ($w) use ($poktan, $possibleKetuaCols) {
-                foreach ($poktan as $pk) {
-                    if (!empty($pk->nama_poktan)) {
-                        $w->orWhere('poktan_nama', 'like', "%{$pk->nama_poktan}%");
-                    }
-                    foreach ($possibleKetuaCols as $col) {
-                        if (isset($pk->{$col}) && !empty($pk->{$col})) {
-                            $w->orWhere('poktan_nama', 'like', "%{$pk->{$col}}%");
+                        if (!empty($tujuanKeys)) {
+                            foreach ($tujuanKeys as $key) {
+                                $q4->orWhere('jenis_tujuan', $key);
+                            }
                         }
-                    }
+                    });
+
+                if ($petugas->isNotEmpty()) {
+                    $w->orWhereHas('petugasRel', function ($q5) use ($petugas) {
+                        foreach ($petugas as $p) {
+                            if (!empty($p->nama)) {
+                                $q5->orWhere('nama', 'like', "%{$p->nama}%");
+                            }
+                            if (isset($p->nip) && !empty($p->nip)) {
+                                $q5->orWhere('nip', 'like', "%{$p->nip}%");
+                            }
+                        }
+                    });
+                }
+
+                if ($poktan->isNotEmpty()) {
+                    $w->orWhereHas('sptTujuan', function ($q6) use ($poktan, $possibleKetuaCols) {
+                        foreach ($poktan as $pk) {
+                            if (!empty($pk->nama_poktan)) {
+                                $q6->orWhere('poktan_nama', 'like', "%{$pk->nama_poktan}%");
+                            }
+
+                            if (!empty($pk->desa)) {
+                                $q6->orWhere('deskripsi_kota', 'like', "%{$pk->desa}%")
+                                    ->orWhere('deskripsi_lainnya', 'like', "%{$pk->desa}%");
+                            }
+
+                            if (!empty($pk->kecamatan)) {
+                                $q6->orWhere('deskripsi_kota', 'like', "%{$pk->kecamatan}%")
+                                    ->orWhere('deskripsi_lainnya', 'like', "%{$pk->kecamatan}%");
+                            }
+
+                            foreach ($possibleKetuaCols as $col) {
+                                if (isset($pk->{$col}) && !empty($pk->{$col})) {
+                                    $q6->orWhere('poktan_nama', 'like', "%{$pk->{$col}}%");
+                                }
+                            }
+                        }
+                    });
                 }
             });
-        }
 
-        $spt = $sptQuery->latest()->limit($limit)->get()->unique('id')->values();
+        $spt = $sptQuery
+            ->latest()
+            ->limit($limit)
+            ->get()
+            ->unique('id')
+            ->values()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'nomor_surat' => $item->nomor_surat,
+                    'tahun' => $item->tahun,
+                    'bulan' => $item->bulan,
+                    'keperluan' => $item->keperluan,
+                    'tanggal_berangkat' => $item->tanggal_berangkat,
+                    'tanggal_kembali' => $item->tanggal_kembali,
+                    'status_bendahara' => $item->status_bendahara,
+                    'status_pencairan' => $item->status_pencairan,
+                    'petugas' => $item->petugasRel->map(function ($p) {
+                        return [
+                            'nip' => $p->nip,
+                            'nama' => $p->nama,
+                        ];
+                    })->values(),
+                    'tujuan' => $item->sptTujuan->map(function ($t) {
+                        return [
+                            'jenis_tujuan' => $t->jenis_tujuan,
+                            'poktan_nama' => $t->poktan_nama,
+                            'deskripsi_kota' => $t->deskripsi_kota,
+                            'deskripsi_lainnya' => $t->deskripsi_lainnya,
+                        ];
+                    })->values(),
+                    'keuangan' => $item->keuangan ? [
+                        'mak' => $item->keuangan->mak,
+                        'nomor_kwitansi' => $item->keuangan->nomor_kwitansi,
+                        'total_biaya' => $item->keuangan->total_biaya,
+                    ] : null,
+                    'created_at' => $item->created_at,
+                ];
+            });
 
-        // Kembalikan JSON untuk dipakai frontend (langsung tampil tabel)
         return response()->json([
             'q' => $q,
             'counts' => [

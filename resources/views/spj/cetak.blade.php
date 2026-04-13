@@ -1,7 +1,6 @@
 @extends('spj.layout')
 
 @section('content')
-    {{-- HALAMAN UMUM (SEKALI SAJA) --}}
     @include('spj.halaman1-spt', ['spt' => $spt])
     <div class="page-break"></div>
 
@@ -9,12 +8,10 @@
     <div class="page-break"></div>
 
     @php
-        $petugasList = $spt->petugasList(); // Collection
+        $petugasList = $spt->petugasList();
     @endphp
 
-    {{-- HALAMAN PER PETUGAS (OTOMATIS BERTAMBAH) --}}
     @foreach ($petugasList as $idx => $petugas)
-        {{-- KWITANSI --}}
         @include('spj.halaman3-kuitansi-1', [
             'spt' => $spt,
             'penerima' => $petugas,
@@ -22,7 +19,6 @@
         ])
         <div class="page-break"></div>
 
-        {{-- RINCIAN 1 --}}
         @include('spj.halaman4-rincian-1', [
             'spt' => $spt,
             'penerima' => $petugas,
@@ -30,18 +26,14 @@
         ])
         <div class="page-break"></div>
 
-        {{-- RINCIAN 2 --}}
         @include('spj.halaman5-rincian-2', [
             'spt' => $spt,
             'penerima' => $petugas,
             'index_petugas' => $idx,
         ])
-
-        {{-- page break setelah rincian-2, kecuali kalau ini petugas terakhir dan setelahnya langsung laporan --}}
         <div class="page-break"></div>
     @endforeach
 
-    {{-- HALAMAN PENUTUP (SEKALI SAJA) --}}
     @include('spj.halaman6-laporan', ['spt' => $spt])
     <div class="page-break"></div>
 

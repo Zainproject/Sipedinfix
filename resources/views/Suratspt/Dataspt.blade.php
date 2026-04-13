@@ -1,608 +1,404 @@
 @extends('index')
 
 @section('main')
-    @php
-        // helper romawi untuk tampilan jika dibutuhkan
-        $romawi = [
-            1 => 'I',
-            2 => 'II',
-            3 => 'III',
-            4 => 'IV',
-            5 => 'V',
-            6 => 'VI',
-            7 => 'VII',
-            8 => 'VIII',
-            9 => 'IX',
-            10 => 'X',
-            11 => 'XI',
-            12 => 'XII',
-        ];
-
-        // helper decode aman
-        $toArr = function ($v) {
-            if (is_array($v)) {
-                return array_values($v);
-            }
-            if (is_null($v)) {
-                return [];
-            }
-            if (is_string($v)) {
-                $v = trim($v);
-                if ($v === '') {
-                    return [];
-                }
-                $decoded = json_decode($v, true);
-                return is_array($decoded) ? array_values($decoded) : [$v];
-            }
-            return array_values((array) $v);
-        };
-    @endphp
-
     <div id="content">
         <div class="container-fluid">
 
             <div class="d-sm-flex align-items-center justify-content-between mb-3">
-                <div>
-                    <h1 class="h3 mb-0 text-gray-800">Data SPT</h1>
-                    <small class="text-muted">Kelola data SPT: tambah, detail, edit, hapus, dan cetak.</small>
-                </div>
+                <h1 class="h3 mb-0 text-gray-800">Data SPT</h1>
 
-                <div class="d-flex" style="gap:8px;">
-                    <a href="{{ route('spt.create') }}" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Tambah SPT
-                    </a>
-                </div>
+                <a href="{{ route('spt.create') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Tambah SPT
+                </a>
             </div>
 
             @if (session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <strong>Berhasil!</strong> {{ session('success') }}
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+                <div class="alert alert-success">{{ session('success') }}</div>
             @endif
 
-            <div class="card shadow mb-4">
+            @if (session('error'))
+                <div class="alert alert-danger">{{ session('error') }}</div>
+            @endif
+
+            {{-- SEARCH --}}
+            <div class="card mb-3 shadow">
+                <div class="card-body">
+                    <form method="GET" action="{{ route('spt.index') }}" id="searchFormSpt">
+                        <div class="form-group mb-1">
+                            <label for="searchSpt" class="font-weight-bold text-primary mb-2">
+                                Pencarian Data SPT
+                            </label>
+
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text bg-white">
+                                        <i class="fas fa-search text-muted"></i>
+                                    </span>
+                                </div>
+
+                                <input type="text" id="searchSpt" name="search" class="form-control"
+                                    placeholder="Ketik nomor surat, keperluan, petugas, tujuan, status, MAK, atau kwitansi..."
+                                    value="{{ request('search') }}" autocomplete="off">
+
+                                <div class="input-group-append">
+                                    <button type="button" id="clearSearchSpt" class="btn btn-light border"
+                                        title="Hapus pencarian" style="{{ request('search') ? '' : 'display:none;' }}">
+                                        &times;
+                                    </button>
+
+                                    <button class="btn btn-primary" type="submit">
+                                        Cari
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <small class="text-muted">
+                            Tekan tombol Cari untuk menampilkan hasil.
+                        </small>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow">
                 <div class="card-body">
 
-                    {{-- Toolbar --}}
-                    <div class="row mb-3">
-                        <div class="col-md-5 mb-2">
-                            <input type="text" id="searchBox" class="form-control"
-                                placeholder="Cari: nomor surat, kwitansi, keperluan, berangkat dari, MAK...">
-                        </div>
-
-                        <div class="col-md-3 mb-2">
-                            <select id="filterBulan" class="form-control">
-                                <option value="">-- Filter Bulan --</option>
-                                @for ($i = 1; $i <= 12; $i++)
-                                    <option value="{{ $i }}">
-                                        {{ \Carbon\Carbon::create()->month($i)->translatedFormat('F') }}</option>
-                                @endfor
-                            </select>
-                        </div>
-
-                        <div class="col-md-2 mb-2">
-                            <select id="filterTahun" class="form-control">
-                                <option value="">-- Tahun --</option>
-                                @for ($y = now()->year; $y >= now()->year - 5; $y--)
-                                    <option value="{{ $y }}">{{ $y }}</option>
-                                @endfor
-                            </select>
-                        </div>
-
-                        <div class="col-md-2 mb-2 d-flex" style="gap:8px;">
-                            <button type="button" id="btnReset" class="btn btn-secondary btn-block">
-                                Reset
-                            </button>
-                        </div>
-                    </div>
-
                     <div class="table-responsive">
-                        <table class="table table-bordered table-hover" id="tableSPT" width="100%" cellspacing="0">
+                        <table class="table table-bordered table-hover align-middle">
                             <thead class="thead-light">
                                 <tr>
-                                    <th style="width:60px;">No</th>
-                                    <th>Nomor</th>
+                                    <th width="60">No</th>
+                                    <th>Nomor Surat</th>
                                     <th>Keperluan</th>
                                     <th>Petugas</th>
+                                    <th>Tujuan</th>
                                     <th>Tanggal</th>
-                                    <th>Biaya</th>
-                                    <th style="width:170px;" class="text-center">Aksi</th>
+                                    <th>Status Anggaran</th>
+                                    <th width="210" class="text-center">Aksi</th>
                                 </tr>
                             </thead>
+
                             <tbody>
-                                @forelse ($spts as $idx => $spt)
+                                @forelse($spts as $i => $spt)
                                     @php
-                                        $petugasArr = $toArr($spt->petugas ?? []);
-                                        $tujuanArr = $toArr($spt->tujuan ?? []);
+                                        $petugasList = $spt->petugasRel->pluck('nama')->filter()->values();
 
-                                        $poktanNama = $toArr($spt->poktan_nama ?? []);
-                                        $desKota = $toArr($spt->deskripsi_kota ?? []);
-                                        $desLainnya = $toArr($spt->deskripsi_lainnya ?? []);
-
-                                        $ketBiaya = $toArr($spt->keterangan_biaya ?? []);
-                                        $hargaBiaya = $toArr($spt->harga_biaya ?? []);
-
-                                        $arahan = $toArr($spt->arahan ?? []);
-                                        $masalah = $toArr($spt->masalah ?? []);
-                                        $saran = $toArr($spt->saran ?? []);
-                                        $lainnya = $toArr($spt->lainnya ?? []);
-
-                                        $tgl = '-';
-                                        if ($spt->tanggal_berangkat && $spt->tanggal_kembali) {
-                                            $tgl =
-                                                \Carbon\Carbon::parse($spt->tanggal_berangkat)->format('d/m/Y') .
-                                                ' - ' .
-                                                \Carbon\Carbon::parse($spt->tanggal_kembali)->format('d/m/Y');
-                                        }
-
-                                        $bulanVal = (int) ($spt->bulan ?? 0);
-                                        $tahunVal = (int) ($spt->tahun ?? 0);
-
-                                        // petugas tampil singkat
-                                        $petugasNama = collect($petugasArr)
-                                            ->map(function ($nip) use ($petugasMap) {
-                                                $nip = trim((string) $nip);
-                                                return $petugasMap[$nip] ?? $nip;
+                                        $tujuanList = collect($spt->sptTujuan)
+                                            ->map(function ($t) {
+                                                if ($t->jenis_tujuan === 'poktan') {
+                                                    return 'Poktan ' .
+                                                        ($t->poktan_nama ?? '-') .
+                                                        ', Desa ' .
+                                                        (optional($t->poktan)->desa ?? '-') .
+                                                        ', Kecamatan ' .
+                                                        (optional($t->poktan)->kecamatan ?? '-');
+                                                }
+                                                if (
+                                                    $t->jenis_tujuan === 'kabupaten_kota' ||
+                                                    $t->jenis_tujuan === 'kota'
+                                                ) {
+                                                    return $t->deskripsi_kota;
+                                                }
+                                                if (
+                                                    $t->jenis_tujuan === 'lain_lain' ||
+                                                    $t->jenis_tujuan === 'lainnya'
+                                                ) {
+                                                    return $t->deskripsi_lainnya;
+                                                }
+                                                return $t->poktan_nama ?? ($t->deskripsi_kota ?? $t->deskripsi_lainnya);
                                             })
                                             ->filter()
+                                            ->unique()
                                             ->values();
 
-                                        $petugasSingkat = $petugasNama->take(2)->implode(', ');
-                                        if ($petugasNama->count() > 2) {
-                                            $petugasSingkat .= ' (+' . $petugasNama->count() - 2 . ' org)';
+                                        $petugasText = $petugasList->implode(' | ');
+                                        $tujuanText = $tujuanList->implode(' | ');
+
+                                        $tanggalText =
+                                            \Carbon\Carbon::parse($spt->tanggal_berangkat)->format('d/m/Y') .
+                                            ' - ' .
+                                            \Carbon\Carbon::parse($spt->tanggal_kembali)->format('d/m/Y');
+
+                                        $statusBendaharaRaw = trim((string) ($spt->status_bendahara ?? ''));
+                                        $statusBendaharaText = $statusBendaharaRaw !== '' ? $statusBendaharaRaw : '-';
+                                        $isStatusSelesai = str_contains(strtolower($statusBendaharaRaw), 'sudah');
+
+                                        $makText = $spt->keuangan->mak ?? '-';
+                                        $nomorKwitansiText = $spt->keuangan->nomor_kwitansi ?? '-';
+                                        $totalBiayaText = $spt->keuangan
+                                            ? 'Rp ' . number_format($spt->keuangan->total_biaya ?? 0, 0, ',', '.')
+                                            : '-';
+
+                                        $detailBiayaPreview = '-';
+                                        if ($spt->keuangan && !empty($spt->keuangan->detail_petugas)) {
+                                            $html = '';
+
+                                            foreach ($spt->keuangan->detail_petugas as $detail) {
+                                                $html .= '<div style="margin-bottom:10px;">';
+                                                $html .=
+                                                    '<strong>' . e($detail['nama_petugas'] ?? '-') . '</strong><br>';
+
+                                                if (!empty($detail['rincian']) && is_array($detail['rincian'])) {
+                                                    foreach ($detail['rincian'] as $idx => $r) {
+                                                        $html .=
+                                                            $idx +
+                                                            1 .
+                                                            '. ' .
+                                                            e($r['keterangan'] ?? '-') .
+                                                            ' - Rp ' .
+                                                            number_format((float) ($r['harga'] ?? 0), 0, ',', '.');
+
+                                                        if (!empty($r['catatan'])) {
+                                                            $html .= ' <em>(' . e($r['catatan']) . ')</em>';
+                                                        }
+
+                                                        $html .= '<br>';
+                                                    }
+                                                } else {
+                                                    $html .= '-<br>';
+                                                }
+
+                                                $html .=
+                                                    '<strong>Total ' .
+                                                    e($detail['nama_petugas'] ?? '-') .
+                                                    ': Rp ' .
+                                                    number_format((float) ($detail['total_biaya'] ?? 0), 0, ',', '.') .
+                                                    '</strong>';
+
+                                                $html .= '</div>';
+                                            }
+
+                                            $detailBiayaPreview = $html;
                                         }
-
-                                        // subtotal/total (sudah ada di kolom)
-                                        $totalBiaya = $spt->total_biaya ?? null;
-
-                                        // untuk filter + search via data-attribute
-                                        $searchBlob = strtolower(
-                                            implode(' ', [
-                                                $spt->nomor_surat,
-                                                $spt->nomor_kwitansi,
-                                                $spt->keperluan,
-                                                $spt->berangkat_dari,
-                                                $spt->mak,
-                                                $tgl,
-                                                $petugasNama->implode(' '),
-                                            ]),
-                                        );
                                     @endphp
 
-                                    <tr class="row-spt" data-search="{{ $searchBlob }}" data-bulan="{{ $bulanVal }}"
-                                        data-tahun="{{ $tahunVal }}">
-                                        <td>{{ $idx + 1 }}</td>
+                                    <tr>
+                                        <td>{{ $i + 1 }}</td>
+                                        <td>{{ $spt->nomor_surat }}</td>
+                                        <td>{{ $spt->keperluan }}</td>
 
                                         <td>
-                                            <div class="font-weight-bold">{{ $spt->nomor_surat ?? '-' }}</div>
-                                            <small class="text-muted d-block">Kwitansi:
-                                                {{ $spt->nomor_kwitansi ?? '-' }}</small>
-                                            <span class="badge badge-info">MAK: {{ $spt->mak ?? '-' }}</span>
+                                            @foreach ($petugasList as $p)
+                                                <div>{{ $p }}</div>
+                                            @endforeach
                                         </td>
 
                                         <td>
-                                            <div class="font-weight-bold">{{ $spt->keperluan ?? '-' }}</div>
-                                            <small class="text-muted">Berangkat dari:
-                                                {{ $spt->berangkat_dari ?? '-' }}</small>
+                                            @foreach ($tujuanList as $t)
+                                                <div>{{ $t }}</div>
+                                            @endforeach
                                         </td>
 
-                                        <td>
-                                            <span class="badge badge-light">
-                                                {{ $petugasSingkat ?: '-' }}
-                                            </span>
-                                        </td>
+                                        <td>{{ $tanggalText }}</td>
 
                                         <td>
-                                            <div>{{ $tgl }}</div>
-                                            <small class="text-muted">Lama: {{ $spt->lama_hari ?? '-' }} hari</small>
-                                        </td>
-
-                                        <td>
-                                            @if ($totalBiaya !== null)
-                                                <div class="font-weight-bold">Rp
-                                                    {{ number_format((float) $totalBiaya, 0, ',', '.') }}</div>
-                                                <small class="text-muted">Subtotal/hari: Rp
-                                                    {{ number_format((float) ($spt->subtotal_perhari ?? 0), 0, ',', '.') }}</small>
+                                            @if ($isStatusSelesai)
+                                                <span class="badge badge-success">
+                                                    {{ $statusBendaharaText }}
+                                                </span>
                                             @else
-                                                <span class="text-muted">-</span>
+                                                <span class="badge badge-secondary">
+                                                    {{ $statusBendaharaText }}
+                                                </span>
                                             @endif
                                         </td>
 
                                         <td class="text-center">
-                                            <div class="btn-group" role="group">
-                                                {{-- Detail Modal --}}
-                                                <button type="button" class="btn btn-sm btn-info" data-toggle="modal"
-                                                    data-target="#detailModal{{ $spt->id }}" title="Detail">
-                                                    <i class="fas fa-eye"></i>
-                                                </button>
+                                            <a href="{{ route('spt.edit', $spt->id) }}" class="btn btn-warning btn-sm"
+                                                title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
 
-                                                {{-- Edit --}}
-                                                <a href="{{ route('spt.edit', $spt->id) }}" class="btn btn-sm btn-warning"
-                                                    title="Edit">
-                                                    <i class="fas fa-edit"></i>
-                                                </a>
+                                            <button class="btn btn-info btn-sm btn-preview-spt" data-toggle="modal"
+                                                data-target="#previewSptModal"
+                                                data-print-url="{{ route('spt.print', $spt->id) }}"
+                                                data-nomor_surat="{{ $spt->nomor_surat }}"
+                                                data-keperluan="{{ $spt->keperluan }}" data-petugas="{{ $petugasText }}"
+                                                data-tujuan="{{ $tujuanText }}" data-tanggal="{{ $tanggalText }}"
+                                                data-status="{{ $statusBendaharaText }}"
+                                                data-status_selesai="{{ $isStatusSelesai ? '1' : '0' }}"
+                                                data-arahan="{{ $spt->arahan }}"
+                                                data-masalah_temuan="{{ $spt->masalah_temuan }}"
+                                                data-saran_tindakan="{{ $spt->saran_tindakan }}"
+                                                data-lain_lain="{{ $spt->lain_lain }}" data-mak="{{ $makText }}"
+                                                data-nomor_kwitansi="{{ $nomorKwitansiText }}"
+                                                data-total_biaya="{{ $totalBiayaText }}"
+                                                data-rincian_biaya="{{ $detailBiayaPreview }}" title="Preview">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
 
-                                                {{-- Print single --}}
-                                                <a href="{{ route('spt.print', $spt->id) }}" class="btn btn-sm btn-success"
-                                                    title="Print">
-                                                    <i class="fas fa-print"></i>
-                                                </a>
+                                            <a href="{{ route('spt.print', $spt->id) }}" class="btn btn-success btn-sm"
+                                                title="Print">
+                                                <i class="fas fa-print"></i>
+                                            </a>
 
-
-                                                {{-- Hapus modal --}}
-                                                <button type="button" class="btn btn-sm btn-danger" data-toggle="modal"
-                                                    data-target="#hapusModal{{ $spt->id }}" title="Hapus">
+                                            <form action="{{ route('spt.destroy', $spt->id) }}" method="POST"
+                                                class="d-inline">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button onclick="return confirm('Yakin hapus?')"
+                                                    class="btn btn-danger btn-sm" title="Hapus">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
-                                            </div>
-
-                                            {{-- Modal Hapus --}}
-                                            <div class="modal fade" id="hapusModal{{ $spt->id }}" tabindex="-1"
-                                                role="dialog" aria-hidden="true">
-                                                <div class="modal-dialog modal-dialog-centered" role="document">
-                                                    <div class="modal-content text-left">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title">Konfirmasi Hapus</h5>
-                                                            <button type="button" class="close" data-dismiss="modal"
-                                                                aria-label="Close">
-                                                                <span aria-hidden="true">&times;</span>
-                                                            </button>
-                                                        </div>
-
-                                                        <div class="modal-body">
-                                                            <p class="mb-2">Yakin ingin menghapus data SPT ini?</p>
-                                                            <div class="alert alert-warning mb-0">
-                                                                <div><strong>Nomor:</strong> {{ $spt->nomor_surat ?? '-' }}
-                                                                </div>
-                                                                <div><strong>Keperluan:</strong>
-                                                                    {{ $spt->keperluan ?? '-' }}</div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary"
-                                                                data-dismiss="modal">Batal</button>
-                                                            <form action="{{ route('spt.destroy', $spt->id) }}"
-                                                                method="POST">
-                                                                @csrf
-                                                                @method('DELETE')
-                                                                <button type="submit" class="btn btn-danger">
-                                                                    <i class="fas fa-trash"></i> Ya, Hapus
-                                                                </button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {{-- Modal Detail --}}
-                                            <div class="modal fade" id="detailModal{{ $spt->id }}" tabindex="-1"
-                                                role="dialog" aria-hidden="true">
-                                                <div class="modal-dialog modal-xl modal-dialog-scrollable"
-                                                    role="document">
-                                                    <div class="modal-content text-left">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title">Detail SPT</h5>
-                                                            <button type="button" class="close" data-dismiss="modal"
-                                                                aria-label="Close">
-                                                                <span aria-hidden="true">&times;</span>
-                                                            </button>
-                                                        </div>
-
-                                                        <div class="modal-body">
-
-                                                            <div class="row">
-                                                                <div class="col-md-6 mb-3">
-                                                                    <div class="text-muted small">Nomor Surat</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->nomor_surat ?? '-' }}</div>
-                                                                </div>
-                                                                <div class="col-md-6 mb-3">
-                                                                    <div class="text-muted small">Nomor Kwitansi</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->nomor_kwitansi ?? '-' }}</div>
-                                                                </div>
-
-                                                                <div class="col-md-4 mb-3">
-                                                                    <div class="text-muted small">MAK</div>
-                                                                    <span
-                                                                        class="badge badge-info">{{ $spt->mak ?? '-' }}</span>
-                                                                </div>
-                                                                <div class="col-md-4 mb-3">
-                                                                    <div class="text-muted small">Alat Angkut</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->alat_angkut ?? '-' }}</div>
-                                                                </div>
-                                                                <div class="col-md-4 mb-3">
-                                                                    <div class="text-muted small">Berangkat Dari</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->berangkat_dari ?? '-' }}</div>
-                                                                </div>
-
-                                                                <div class="col-md-6 mb-3">
-                                                                    <div class="text-muted small">Keperluan</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->keperluan ?? '-' }}</div>
-                                                                </div>
-                                                                <div class="col-md-6 mb-3">
-                                                                    <div class="text-muted small">Yang Hadir</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->kehadiran ?? '-' }}</div>
-                                                                </div>
-
-                                                                <div class="col-md-6 mb-3">
-                                                                    <div class="text-muted small">Tanggal Berangkat</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->tanggal_berangkat ? \Carbon\Carbon::parse($spt->tanggal_berangkat)->format('d/m/Y') : '-' }}
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-md-6 mb-3">
-                                                                    <div class="text-muted small">Tanggal Kembali</div>
-                                                                    <div class="font-weight-bold">
-                                                                        {{ $spt->tanggal_kembali ? \Carbon\Carbon::parse($spt->tanggal_kembali)->format('d/m/Y') : '-' }}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <hr>
-
-                                                            {{-- Petugas --}}
-                                                            <h6 class="font-weight-bold">Petugas</h6>
-                                                            @if (!empty($petugasArr))
-                                                                <ul class="mb-3">
-                                                                    @foreach ($petugasArr as $nip)
-                                                                        @php $nip = trim((string)$nip); @endphp
-                                                                        <li>{{ $petugasMap[$nip] ?? $nip }}</li>
-                                                                    @endforeach
-                                                                </ul>
-                                                            @else
-                                                                <div class="text-muted mb-3">-</div>
-                                                            @endif
-
-                                                            {{-- Tujuan --}}
-                                                            <h6 class="font-weight-bold">Tujuan & Detail</h6>
-                                                            @if (!empty($tujuanArr))
-                                                                <div class="table-responsive mb-3">
-                                                                    <table class="table table-sm table-bordered">
-                                                                        <thead class="thead-light">
-                                                                            <tr>
-                                                                                <th style="width:50px;">#</th>
-                                                                                <th style="width:200px;">Jenis Tujuan</th>
-                                                                                <th>Detail</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            @foreach ($tujuanArr as $i2 => $tj)
-                                                                                @php
-                                                                                    $detail = '-';
-                                                                                    if ($tj === 'kelompok_tani') {
-                                                                                        $detail =
-                                                                                            $poktanNama[$i2] ?? '-';
-                                                                                    }
-                                                                                    if ($tj === 'kabupaten_kota') {
-                                                                                        $detail = $desKota[$i2] ?? '-';
-                                                                                    }
-                                                                                    if ($tj === 'lainnya') {
-                                                                                        $detail =
-                                                                                            $desLainnya[$i2] ?? '-';
-                                                                                    }
-                                                                                @endphp
-                                                                                <tr>
-                                                                                    <td>{{ $i2 + 1 }}</td>
-                                                                                    <td>{{ ucwords(str_replace('_', ' ', $tj)) }}
-                                                                                    </td>
-                                                                                    <td>{{ $detail }}</td>
-                                                                                </tr>
-                                                                            @endforeach
-                                                                        </tbody>
-                                                                    </table>
-                                                                </div>
-                                                            @else
-                                                                <div class="text-muted mb-3">-</div>
-                                                            @endif
-
-                                                            {{-- Biaya --}}
-                                                            <h6 class="font-weight-bold">Rincian Biaya (per hari)</h6>
-                                                            @if (!empty($ketBiaya))
-                                                                <div class="table-responsive mb-2">
-                                                                    <table class="table table-sm table-bordered">
-                                                                        <thead class="thead-light">
-                                                                            <tr>
-                                                                                <th style="width:50px;">#</th>
-                                                                                <th>Keterangan</th>
-                                                                                <th style="width:200px;"
-                                                                                    class="text-right">Harga / Hari</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            @foreach ($ketBiaya as $i3 => $ket)
-                                                                                @php $harga = (float)($hargaBiaya[$i3] ?? 0); @endphp
-                                                                                <tr>
-                                                                                    <td>{{ $i3 + 1 }}</td>
-                                                                                    <td>{{ $ket }}</td>
-                                                                                    <td class="text-right">Rp
-                                                                                        {{ number_format($harga, 0, ',', '.') }}
-                                                                                    </td>
-                                                                                </tr>
-                                                                            @endforeach
-                                                                        </tbody>
-                                                                    </table>
-                                                                </div>
-
-                                                                <div class="row mb-3">
-                                                                    <div class="col-md-4">
-                                                                        <div class="text-muted small">Lama Hari</div>
-                                                                        <div class="font-weight-bold">
-                                                                            {{ $spt->lama_hari ?? '-' }} hari</div>
-                                                                    </div>
-                                                                    <div class="col-md-4">
-                                                                        <div class="text-muted small">Subtotal / Hari</div>
-                                                                        <div class="font-weight-bold">Rp
-                                                                            {{ number_format((float) ($spt->subtotal_perhari ?? 0), 0, ',', '.') }}
-                                                                        </div>
-                                                                    </div>
-                                                                    <div class="col-md-4">
-                                                                        <div class="text-muted small">Total Biaya</div>
-                                                                        <div class="font-weight-bold">Rp
-                                                                            {{ number_format((float) ($spt->total_biaya ?? 0), 0, ',', '.') }}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            @else
-                                                                <div class="text-muted mb-3">-</div>
-                                                            @endif
-
-                                                            <div class="row">
-                                                                <div class="col-md-6 mb-3">
-                                                                    <h6 class="font-weight-bold">Arahan</h6>
-                                                                    @if (!empty($arahan))
-                                                                        <ol class="mb-0">
-                                                                            @foreach ($arahan as $x)
-                                                                                <li>{{ $x }}</li>
-                                                                            @endforeach
-                                                                        </ol>
-                                                                    @else
-                                                                        <div class="text-muted">-</div>
-                                                                    @endif
-                                                                </div>
-
-                                                                <div class="col-md-6 mb-3">
-                                                                    <h6 class="font-weight-bold">Masalah / Temuan</h6>
-                                                                    @if (!empty($masalah))
-                                                                        <ol class="mb-0">
-                                                                            @foreach ($masalah as $x)
-                                                                                <li>{{ $x }}</li>
-                                                                            @endforeach
-                                                                        </ol>
-                                                                    @else
-                                                                        <div class="text-muted">-</div>
-                                                                    @endif
-                                                                </div>
-
-                                                                <div class="col-md-6 mb-3">
-                                                                    <h6 class="font-weight-bold">Saran Tindakan</h6>
-                                                                    @if (!empty($saran))
-                                                                        <ol class="mb-0">
-                                                                            @foreach ($saran as $x)
-                                                                                <li>{{ $x }}</li>
-                                                                            @endforeach
-                                                                        </ol>
-                                                                    @else
-                                                                        <div class="text-muted">-</div>
-                                                                    @endif
-                                                                </div>
-
-                                                                <div class="col-md-6 mb-3">
-                                                                    <h6 class="font-weight-bold">Lain-lain</h6>
-                                                                    @if (!empty($lainnya))
-                                                                        <ol class="mb-0">
-                                                                            @foreach ($lainnya as $x)
-                                                                                <li>{{ $x }}</li>
-                                                                            @endforeach
-                                                                        </ol>
-                                                                    @else
-                                                                        <div class="text-muted">-</div>
-                                                                    @endif
-                                                                </div>
-                                                            </div>
-
-                                                            <hr>
-                                                            <div class="d-flex justify-content-between">
-                                                                <small class="text-muted">Created:
-                                                                    {{ $spt->created_at ? $spt->created_at->format('d/m/Y H:i') : '-' }}</small>
-                                                                <small class="text-muted">Updated:
-                                                                    {{ $spt->updated_at ? $spt->updated_at->format('d/m/Y H:i') : '-' }}</small>
-                                                            </div>
-
-                                                        </div>
-
-                                                        <div class="modal-footer">
-                                                            <a href="{{ route('spt.edit', $spt->id) }}"
-                                                                class="btn btn-warning">
-                                                                <i class="fas fa-edit"></i> Edit
-                                                            </a>
-                                                            <a href="{{ route('spt.print', $spt->id) }}"
-                                                                class="btn btn-sm btn-success" title="Print">
-                                                                <i class="fas fa-print"></i>
-                                                            </a>
-
-                                                            <button type="button" class="btn btn-secondary"
-                                                                data-dismiss="modal">Tutup</button>
-                                                        </div>
-
-                                                    </div>
-                                                </div>
-                                            </div>
-
+                                            </form>
                                         </td>
                                     </tr>
+
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-4">Data belum ada.</td>
+                                        <td colspan="8" class="text-center">Data kosong</td>
                                     </tr>
                                 @endforelse
                             </tbody>
                         </table>
                     </div>
 
-                    <div class="mt-2">
-                        <small class="text-muted" id="infoCount"></small>
-                    </div>
-
                 </div>
             </div>
+        </div>
+    </div>
 
+    {{-- MODAL --}}
+    <div class="modal fade" id="previewSptModal" tabindex="-1" role="dialog" aria-labelledby="previewSptModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+            <div class="modal-content">
+
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="previewSptModalLabel">Preview SPT</h5>
+                    <button class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <table class="table table-bordered">
+                        <tr>
+                            <th>Nomor</th>
+                            <td id="preview_nomor_surat"></td>
+                        </tr>
+                        <tr>
+                            <th>Keperluan</th>
+                            <td id="preview_keperluan"></td>
+                        </tr>
+                        <tr>
+                            <th>Petugas</th>
+                            <td id="preview_petugas"></td>
+                        </tr>
+                        <tr>
+                            <th>Tujuan</th>
+                            <td id="preview_tujuan"></td>
+                        </tr>
+                        <tr>
+                            <th>Tanggal</th>
+                            <td id="preview_tanggal"></td>
+                        </tr>
+                        <tr>
+                            <th>Status Anggaran</th>
+                            <td id="preview_status"></td>
+                        </tr>
+                        <tr>
+                            <th>Arahan</th>
+                            <td id="preview_arahan"></td>
+                        </tr>
+                        <tr>
+                            <th>Masalah</th>
+                            <td id="preview_masalah_temuan"></td>
+                        </tr>
+                        <tr>
+                            <th>Saran</th>
+                            <td id="preview_saran_tindakan"></td>
+                        </tr>
+                        <tr>
+                            <th>Lain</th>
+                            <td id="preview_lain_lain"></td>
+                        </tr>
+                        <tr>
+                            <th>MAK</th>
+                            <td id="preview_mak"></td>
+                        </tr>
+                        <tr>
+                            <th>Nomor Kwitansi</th>
+                            <td id="preview_nomor_kwitansi"></td>
+                        </tr>
+                        <tr>
+                            <th>Rincian Biaya Bendahara</th>
+                            <td id="preview_rincian_biaya"></td>
+                        </tr>
+                        <tr>
+                            <th>Total Biaya</th>
+                            <td id="preview_total_biaya"></td>
+                        </tr>
+                    </table>
+                </div>
+
+            </div>
         </div>
     </div>
 
     <script>
-        (function() {
-            const searchBox = document.getElementById('searchBox');
-            const filterBulan = document.getElementById('filterBulan');
-            const filterTahun = document.getElementById('filterTahun');
-            const btnReset = document.getElementById('btnReset');
-            const rows = Array.from(document.querySelectorAll('.row-spt'));
-            const infoCount = document.getElementById('infoCount');
+        function formatNumbered(text) {
+            if (!text) return '-';
 
-            function applyFilter() {
-                const q = (searchBox.value || '').toLowerCase().trim();
-                const bulan = (filterBulan.value || '').trim();
-                const tahun = (filterTahun.value || '').trim();
+            return text.split(/\n/)
+                .filter(t => t.trim() !== '')
+                .map((t, i) => (i + 1) + '. ' + t)
+                .join('<br>');
+        }
 
-                let shown = 0;
+        document.querySelectorAll('.btn-preview-spt').forEach(btn => {
+            btn.addEventListener('click', function() {
+                preview_nomor_surat.innerHTML = this.dataset.nomor_surat || '-';
+                preview_keperluan.innerHTML = this.dataset.keperluan || '-';
+                preview_petugas.innerHTML = this.dataset.petugas ? this.dataset.petugas.split(' | ').join(
+                    '<br>') : '-';
+                preview_tujuan.innerHTML = this.dataset.tujuan ? this.dataset.tujuan.split(' | ').join(
+                    '<br>') : '-';
+                preview_tanggal.innerHTML = this.dataset.tanggal || '-';
 
-                rows.forEach(row => {
-                    const blob = (row.dataset.search || '');
-                    const rowBulan = (row.dataset.bulan || '').trim();
-                    const rowTahun = (row.dataset.tahun || '').trim();
+                if (this.dataset.status_selesai === '1') {
+                    preview_status.innerHTML = '<span class="badge badge-success">' + (this.dataset
+                        .status || '-') + '</span>';
+                } else {
+                    preview_status.innerHTML = '<span class="badge badge-secondary">' + (this.dataset
+                        .status || '-') + '</span>';
+                }
 
-                    const okQ = !q || blob.includes(q);
-                    const okB = !bulan || rowBulan === bulan;
-                    const okT = !tahun || rowTahun === tahun;
+                preview_arahan.innerHTML = formatNumbered(this.dataset.arahan);
+                preview_masalah_temuan.innerHTML = formatNumbered(this.dataset.masalah_temuan);
+                preview_saran_tindakan.innerHTML = formatNumbered(this.dataset.saran_tindakan);
+                preview_lain_lain.innerHTML = formatNumbered(this.dataset.lain_lain);
 
-                    const visible = okQ && okB && okT;
-                    row.style.display = visible ? '' : 'none';
-                    if (visible) shown++;
-                });
+                preview_mak.innerHTML = this.dataset.mak || '-';
+                preview_nomor_kwitansi.innerHTML = this.dataset.nomor_kwitansi || '-';
+                preview_total_biaya.innerHTML = this.dataset.total_biaya || '-';
+                preview_rincian_biaya.innerHTML = this.dataset.rincian_biaya || '-';
+            });
+        });
 
-                infoCount.textContent = `Menampilkan ${shown} dari ${rows.length} data`;
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('searchFormSpt');
+            const input = document.getElementById('searchSpt');
+            const clearBtn = document.getElementById('clearSearchSpt');
+
+            if (!form || !input || !clearBtn) return;
+
+            function toggleClearButton() {
+                clearBtn.style.display = input.value.trim() !== '' ? '' : 'none';
             }
 
-            searchBox.addEventListener('input', applyFilter);
-            filterBulan.addEventListener('change', applyFilter);
-            filterTahun.addEventListener('change', applyFilter);
+            toggleClearButton();
 
-            btnReset.addEventListener('click', function() {
-                searchBox.value = '';
-                filterBulan.value = '';
-                filterTahun.value = '';
-                applyFilter();
+            input.addEventListener('input', function() {
+                toggleClearButton();
             });
 
-            applyFilter();
-        })();
+            clearBtn.addEventListener('click', function() {
+                input.value = '';
+                toggleClearButton();
+                form.submit();
+            });
+        });
     </script>
+
 @endsection

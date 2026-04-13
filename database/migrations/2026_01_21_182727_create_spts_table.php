@@ -11,56 +11,27 @@ return new class extends Migration
         Schema::create('spts', function (Blueprint $table) {
             $table->id();
 
-            // =====================
-            // MULTI DATA (JSON)
-            // =====================
-            $table->json('petugas');                 // wajib
-            $table->json('tujuan');                  // wajib
-            $table->json('poktan_nama')->nullable(); // tergantung jenis tujuan
-            $table->json('deskripsi_kota')->nullable();
-            $table->json('deskripsi_lainnya')->nullable();
+            // DATA SPT - DIISI SEKRETARIS
+            $table->string('nomor_surat')->unique();
+            $table->string('alat_angkut');
+            $table->string('berangkat_dari');
+            $table->text('keperluan');
 
-            // STEP 4 (wajib)
-            $table->json('arahan');
-            $table->json('masalah');
-            $table->json('saran');
-            $table->json('lainnya');
+            $table->date('tanggal_berangkat');
+            $table->date('tanggal_kembali');
+            $table->integer('total_hari');
 
-            // =====================
-            // DATA UTAMA (wajib)
-            // =====================
-            $table->string('keperluan');     // wajib
-            $table->string('kehadiran');     // wajib
-            $table->string('berangkat_dari'); // wajib (baru)
+            $table->integer('bulan');
+            $table->integer('tahun');
 
-            $table->date('tanggal_berangkat'); // wajib
-            $table->date('tanggal_kembali');   // wajib
+            $table->text('kehadiran');
+            $table->text('arahan');
+            $table->text('masalah_temuan');
+            $table->text('saran_tindakan');
+            $table->text('lain_lain')->nullable();
 
-            // lama (boleh tetap ada untuk kompatibilitas lama)
-            $table->decimal('biaya_perhari', 12, 2)->nullable();
-
-            // =====================
-            // BIAYA LIST (baru)
-            // =====================
-            $table->json('keterangan_biaya')->nullable(); // list item biaya
-            $table->json('harga_biaya')->nullable();      // list harga per item
-
-            // hasil hitungan (baru)
-            $table->integer('lama_hari')->nullable();
-            $table->decimal('subtotal_perhari', 14, 2)->nullable();
-            $table->decimal('total_biaya', 14, 2)->nullable();
-
-            // =====================
-            // ADMINISTRASI (wajib)
-            // =====================
-            $table->integer('bulan'); // wajib
-            $table->integer('tahun'); // wajib
-            $table->string('mak');    // wajib
-
-            $table->string('nomor_surat')->unique();    // wajib
-            $table->string('nomor_kwitansi')->unique(); // wajib
-
-            $table->string('alat_angkut'); // wajib
+            // STATUS PROSES BENDAHARA
+            $table->string('status_bendahara')->default('belum diisi bendahara');
 
             $table->timestamps();
         });

@@ -7,19 +7,22 @@ use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
-use App\Http\Controllers\Auth\RegisteredUserController; // ✅ dimatikan
+use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| GUEST (BELUM LOGIN)
+|--------------------------------------------------------------------------
+*/
 
 Route::middleware('guest')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | REGISTER ❌ DIMATIKAN (FALSE)
+    | REGISTER (OPSIONAL)
     |--------------------------------------------------------------------------
-    | Kalau mau aktifkan lagi nanti, tinggal buka komentar ini:
-    |
-    | 
     */
     Route::get('register', [RegisteredUserController::class, 'create'])->name('register');
     Route::post('register', [RegisteredUserController::class, 'store']);
@@ -37,26 +40,39 @@ Route::middleware('guest')->group(function () {
     | FORGOT PASSWORD
     |--------------------------------------------------------------------------
     */
-    Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
-    Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])->name('password.email');
+    Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
+        ->name('password.request');
+
+    Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->name('password.email');
 
     /*
     |--------------------------------------------------------------------------
     | RESET PASSWORD
     |--------------------------------------------------------------------------
     */
-    Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
-    Route::post('reset-password', [NewPasswordController::class, 'store'])->name('password.store');
+    Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])
+        ->name('password.reset');
+
+    // ✅ INI YANG BENAR
+    Route::post('reset-password', [NewPasswordController::class, 'store'])
+        ->name('password.store');
 });
 
+/*
+|--------------------------------------------------------------------------
+| AUTH (SUDAH LOGIN)
+|--------------------------------------------------------------------------
+*/
 Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | EMAIL VERIFICATION (opsional)
+    | EMAIL VERIFICATION
     |--------------------------------------------------------------------------
     */
-    Route::get('verify-email', EmailVerificationPromptController::class)->name('verification.notice');
+    Route::get('verify-email', EmailVerificationPromptController::class)
+        ->name('verification.notice');
 
     Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
         ->middleware(['signed', 'throttle:6,1'])
@@ -68,18 +84,27 @@ Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | CONFIRM PASSWORD + UPDATE PASSWORD
+    | CONFIRM PASSWORD
     |--------------------------------------------------------------------------
     */
-    Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])->name('password.confirm');
+    Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])
+        ->name('password.confirm');
+
     Route::post('confirm-password', [ConfirmablePasswordController::class, 'store']);
-    Route::put('password', [PasswordController::class, 'update'])->name('password.update');
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE PASSWORD (SETELAH LOGIN)
+    |--------------------------------------------------------------------------
+    */
+    Route::put('password', [PasswordController::class, 'update'])
+        ->name('password.update');
 
     /*
     |--------------------------------------------------------------------------
     | LOGOUT
     |--------------------------------------------------------------------------
-    | Logout HARUS POST (CSRF)
     */
-    Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+    Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
+        ->name('logout');
 });

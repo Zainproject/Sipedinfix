@@ -2,195 +2,105 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Carbon\Carbon;
-use App\Models\Petugas;
-use App\Models\Poktan;
 
 class Spt extends Model
 {
-    use HasFactory;
+    protected $table = 'spts';
 
-    /**
-     * =========================
-     * MASS ASSIGNMENT
-     * =========================
-     */
     protected $fillable = [
-        // step 1
-        'petugas',
+        'poktan_id',
+        'nomor_surat',
+        'alat_angkut',
+        'berangkat_dari',
+        'keperluan',
+        'tanggal_berangkat',
+        'tanggal_kembali',
+        'total_hari',
+        'bulan',
+        'tahun',
+        'kehadiran',
+        'arahan',
+        'masalah_temuan',
+        'saran_tindakan',
+        'lain_lain',
+        'status_bendahara',
+        'status_pencairan',
+
+        // field keuangan / cetak
+        'nomor_kwitansi',
+        'mak',
+        'subtotal_perhari',
+        'total_biaya',
+        'keterangan_biaya',
+        'harga_biaya',
+
+        // field tujuan dinamis
         'tujuan',
         'poktan_nama',
         'deskripsi_kota',
         'deskripsi_lainnya',
-
-        'keperluan',
-        'kehadiran',
-
-        'alat_angkut',
-        'berangkat_dari',
-
-        // step 2
-        'tanggal_berangkat',
-        'tanggal_kembali',
-
-        // lama (legacy)
-        'biaya_perhari',
-
-        // biaya baru
-        'keterangan_biaya',
-        'harga_biaya',
-        'lama_hari',
-        'subtotal_perhari',
-        'total_biaya',
-
-        // step 3
-        'bulan',
-        'tahun',
-        'mak',
-        'nomor_surat',
-        'nomor_kwitansi',
-
-        // step 4
-        'arahan',
-        'masalah',
-        'saran',
-        'lainnya',
     ];
 
-    /**
-     * =========================
-     * CAST JSON
-     * =========================
-     */
     protected $casts = [
-        'petugas' => 'array',
-        'tujuan' => 'array',
-        'poktan_nama' => 'array',
-        'deskripsi_kota' => 'array',
+        'tanggal_berangkat' => 'date',
+        'tanggal_kembali'   => 'date',
+        'total_hari'        => 'integer',
+        'bulan'             => 'integer',
+        'tahun'             => 'integer',
+
+        // dipakai di halaman print
+        'tujuan'            => 'array',
+        'poktan_nama'       => 'array',
+        'deskripsi_kota'    => 'array',
         'deskripsi_lainnya' => 'array',
-
-        'keterangan_biaya' => 'array',
-        'harga_biaya' => 'array',
-
-        'arahan' => 'array',
-        'masalah' => 'array',
-        'saran' => 'array',
-        'lainnya' => 'array',
+        'keterangan_biaya'  => 'array',
+        'harga_biaya'       => 'array',
     ];
 
-    /**
-     * =========================
-     * HELPER NORMALISASI ARRAY
-     * (aman untuk JSON / string / koma)
-     * =========================
-     */
-    protected function normalizeToArray($val): array
+    public function poktan()
     {
-        if (is_array($val)) return $val;
+        return $this->belongsTo(Poktan::class, 'poktan_id', 'nama_poktan');
+    }
 
-        if (is_string($val)) {
-            $val = trim($val);
-            if ($val === '') return [];
+    public function sptPetugas()
+    {
+        return $this->hasMany(SptPetugas::class, 'spt_id', 'id');
+    }
 
-            // JSON string
-            $decoded = json_decode($val, true);
-            if (is_array($decoded)) return $decoded;
+    public function petugasRel()
+    {
+        return $this->belongsToMany(
+            Petugas::class,
+            'spt_petugas',
+            'spt_id',
+            'nip_petugas',
+            'id',
+            'nip'
+        )->withTimestamps();
+    }
 
-            // comma / semicolon / pipe separated
-            $val = str_replace([';', '|'], ',', $val);
-            return array_values(array_filter(array_map('trim', explode(',', $val))));
-        }
+    public function sptTujuan()
+    {
+        return $this->hasMany(SptTujuan::class, 'spt_id', 'id');
+    }
 
-        return [];
+    public function keuangan()
+    {
+        return $this->hasOne(Keuangan::class, 'spt_id', 'id');
     }
 
     /**
-     * =========================
-     * PETUGAS LIST (AMAN)
-     * =========================
+     * Ambil daftar petugas yang terhubung ke SPT ini.
+     * Dipakai oleh view print seperti:
+     * $spt->petugasList()
      */
     public function petugasList()
     {
-        $list = $this->normalizeToArray($this->attributes['petugas'] ?? $this->petugas);
-
-        if (count($list) === 0) return collect();
-
-        return Petugas::whereIn('nip', $list)->get();
-    }
-
-    /**
-     * =========================
-     * POKTAN LIST (AMAN)
-     * =========================
-     */
-    public function poktanList()
-    {
-        $list = $this->normalizeToArray($this->attributes['poktan_nama'] ?? $this->poktan_nama);
-
-        if (count($list) === 0) return collect();
-
-        return Poktan::whereIn('nama_poktan', $list)->get();
-    }
-
-    /**
-     * =========================
-     * ACCESSOR: LAMA HARI
-     * =========================
-     */
-    public function getLamaHariAttribute($value)
-    {
-        if (!is_null($value)) return (int) $value;
-
-        if (!$this->tanggal_berangkat || !$this->tanggal_kembali) return 0;
-
-        return Carbon::parse($this->tanggal_berangkat)
-            ->diffInDays(Carbon::parse($this->tanggal_kembali)) + 1;
-    }
-
-    /**
-     * =========================
-     * ACCESSOR: SUBTOTAL PER HARI
-     * =========================
-     */
-    public function getSubtotalPerhariAttribute($value)
-    {
-        if (!is_null($value)) return (float) $value;
-
-        if (is_array($this->harga_biaya) && count($this->harga_biaya)) {
-            return collect($this->harga_biaya)->sum(fn($v) => (float) $v);
+        if ($this->relationLoaded('petugasRel')) {
+            return $this->petugasRel->values();
         }
 
-        // fallback legacy
-        return (float) ($this->biaya_perhari ?? 0);
-    }
-
-    /**
-     * =========================
-     * ACCESSOR: TOTAL BIAYA
-     * =========================
-     */
-    public function getTotalBiayaAttribute($value)
-    {
-        if (!is_null($value)) return (float) $value;
-
-        return (float) ($this->lama_hari * $this->subtotal_perhari);
-    }
-
-    /**
-     * =========================
-     * RELASI (OPTIONAL / LEGACY)
-     * =========================
-     * Dipakai kalau suatu saat kamu benar-benar pakai FK
-     */
-    public function petugasRel()
-    {
-        return $this->belongsTo(Petugas::class, 'petugas_id');
-    }
-
-    public function poktanRel()
-    {
-        return $this->belongsTo(Poktan::class, 'poktan_id');
+        return $this->petugasRel()->get()->values();
     }
 }

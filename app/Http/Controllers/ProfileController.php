@@ -20,25 +20,22 @@ class ProfileController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            // Data Pejabat
-            'name'       => ['required', 'string', 'max:150'],
-            'nip'        => ['required', 'string', 'max:50'],
-            'pangkat'    => ['nullable', 'string', 'max:80'],
-            'masa_bakti' => ['nullable', 'string', 'max:80'],
-            'jabatan'    => ['nullable', 'string', 'max:120'],
-
-            // Data Bendahara
-            'bendahara_nama'       => ['required', 'string', 'max:150'],
-            'bendahara_nip'        => ['required', 'string', 'max:50'],
-            'bendahara_pangkat'    => ['nullable', 'string', 'max:80'],
-            'bendahara_masa_bakti' => ['nullable', 'string', 'max:80'],
-            'bendahara_jabatan'    => ['nullable', 'string', 'max:120'],
-
-            // Data Login
-            'email'  => ['required', 'email', 'max:120', 'unique:users,email,' . $user->id],
-
-            // Avatar
-            'avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'name'    => ['required', 'string', 'max:150'],
+            'nip'     => ['required', 'string', 'max:50'],
+            'jabatan' => ['required', 'in:ketua,sekretaris,bendahara'],
+            'email'   => ['required', 'email', 'max:120', 'unique:users,email,' . $user->id],
+            'avatar'  => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ], [
+            'name.required'    => 'Nama wajib diisi.',
+            'nip.required'     => 'NIP wajib diisi.',
+            'jabatan.required' => 'Jabatan wajib dipilih.',
+            'jabatan.in'       => 'Jabatan tidak valid.',
+            'email.required'   => 'Email wajib diisi.',
+            'email.email'      => 'Format email tidak valid.',
+            'email.unique'     => 'Email sudah digunakan.',
+            'avatar.image'     => 'File avatar harus berupa gambar.',
+            'avatar.mimes'     => 'Avatar harus berformat jpg, jpeg, png, atau webp.',
+            'avatar.max'       => 'Ukuran avatar maksimal 2MB.',
         ]);
 
         if ($request->hasFile('avatar')) {
@@ -58,10 +55,16 @@ class ProfileController extends Controller
         $request->validate([
             'current_password' => ['required'],
             'password' => ['required', 'confirmed', Password::min(8)],
+        ], [
+            'current_password.required' => 'Kata sandi saat ini wajib diisi.',
+            'password.required' => 'Kata sandi baru wajib diisi.',
+            'password.confirmed' => 'Konfirmasi kata sandi tidak cocok.',
         ]);
 
         if (!Hash::check($request->current_password, $user->password)) {
-            return back()->withErrors(['current_password' => 'Kata sandi saat ini tidak sesuai.']);
+            return back()->withErrors([
+                'current_password' => 'Kata sandi saat ini tidak sesuai.'
+            ]);
         }
 
         $user->update([

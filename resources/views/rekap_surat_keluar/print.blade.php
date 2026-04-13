@@ -143,7 +143,6 @@
 
 <body>
 
-    {{-- Toolbar --}}
     <div class="no-print toolbar">
         <button onclick="window.print()">Print</button>
         <button onclick="window.close()">Tutup</button>
@@ -156,7 +155,7 @@
             [
                 'spt' => 'DATA SPT',
                 'petugas' => 'REKAP PETUGAS',
-                'poktan' => 'REKAP POKTAN',
+                'poktan' => 'REKAP TUJUAN / POKTAN',
                 'all' => 'SEMUA (SPT + REKAP)',
             ][$jenis] ?? 'SEMUA (SPT + REKAP)';
 
@@ -172,13 +171,11 @@
         $rekapPoktan = $rekapPoktan ?? collect();
     @endphp
 
-    {{-- Header --}}
     <div class="header">
         <div class="title">REKAP SURAT KELUAR</div>
         <div class="subtitle">Mode Cetak: <b>{{ $jenisLabel }}</b></div>
     </div>
 
-    {{-- Filter + KPI --}}
     <div class="meta">
         <div class="box">
             <div><b>Tahun</b>: {{ $filterInfo['tahun'] ?: 'Semua' }}</div>
@@ -200,7 +197,7 @@
     <hr class="sep">
 
     {{-- =======================
-        1) CETAK SPT (SAJA / ALL)
+        1) CETAK DATA SPT
        ======================= --}}
     @if ($jenis === 'spt' || $jenis === 'all')
         <div class="section-title">Data SPT</div>
@@ -209,10 +206,13 @@
                 <tr>
                     <th class="nowrap" style="width:40px;">No</th>
                     <th>No Surat</th>
+                    <th>Petugas</th>
+                    <th>Tujuan</th>
                     <th>No Kwitansi</th>
                     <th class="nowrap" style="width:90px;">Tahun/Bulan</th>
                     <th>Keperluan</th>
                     <th class="nowrap" style="width:120px;">Berangkat - Kembali</th>
+                    <th>Status</th>
                     <th class="nowrap right" style="width:110px;">Total Biaya</th>
                 </tr>
             </thead>
@@ -225,32 +225,77 @@
                         $tgl2 = $spt->tanggal_kembali
                             ? \Carbon\Carbon::parse($spt->tanggal_kembali)->format('d-m-Y')
                             : '-';
+
+                        $petugasList = $spt->petugasRel->pluck('nama')->filter()->values();
+
+                        $tujuanList = collect($spt->sptTujuan)
+                            ->map(function ($t) {
+                                if ($t->jenis_tujuan === 'poktan') {
+                                    return 'Poktan ' .
+                                        ($t->poktan_nama ?? '-') .
+                                        ', Desa ' .
+                                        (optional($t->poktan)->desa ?? '-') .
+                                        ', Kecamatan ' .
+                                        (optional($t->poktan)->kecamatan ?? '-');
+                                }
+
+                                if ($t->jenis_tujuan === 'kabupaten_kota') {
+                                    return $t->deskripsi_kota ?: '-';
+                                }
+
+                                if ($t->jenis_tujuan === 'lain_lain') {
+                                    return $t->deskripsi_lainnya ?: '-';
+                                }
+
+                                return '-';
+                            })
+                            ->filter()
+                            ->unique()
+                            ->values();
+
+                        $statusText = trim((string) ($spt->status_bendahara ?? '')) ?: '-';
+                        $kwitansi = optional($spt->keuangan)->nomor_kwitansi ?? '-';
+                        $totalBiayaRow = (float) optional($spt->keuangan)->total_biaya;
                     @endphp
                     <tr>
                         <td class="center nowrap">{{ $i + 1 }}</td>
                         <td>{{ $spt->nomor_surat ?? '-' }}</td>
-                        <td>{{ $spt->nomor_kwitansi ?? '-' }}</td>
+                        <td>
+                            @forelse($petugasList as $p)
+                                <div>{{ $p }}</div>
+                            @empty
+                                -
+                            @endforelse
+                        </td>
+                        <td>
+                            @forelse($tujuanList as $t)
+                                <div>{{ $t }}</div>
+                            @empty
+                                -
+                            @endforelse
+                        </td>
+                        <td>{{ $kwitansi }}</td>
                         <td class="center nowrap">{{ $spt->tahun ?? '-' }}/{{ $spt->bulan ?? '-' }}</td>
                         <td>{{ $spt->keperluan ?? '-' }}</td>
                         <td class="nowrap">{{ $tgl1 }} s/d {{ $tgl2 }}</td>
-                        <td class="right nowrap">Rp {{ number_format($spt->total_biaya ?? 0, 0, ',', '.') }}</td>
+                        <td>{{ $statusText }}</td>
+                        <td class="right nowrap">Rp {{ number_format($totalBiayaRow, 0, ',', '.') }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7" class="center">Tidak ada data.</td>
+                        <td colspan="10" class="center">Tidak ada data.</td>
                     </tr>
                 @endforelse
             </tbody>
         </table>
     @endif
 
-    {{-- Kalau all: kasih pemisah halaman biar rapi --}}
     @if ($jenis === 'all')
         <div class="page-break"></div>
     @endif
 
     {{-- =======================
-        2) CETAK REKAP PETUGAS (SAJA / ALL)
+        2) CETAK REKAP PETUGAS
        ======================= --}}
     @if ($jenis === 'petugas' || $jenis === 'all')
         <div class="section-title">Rekap Petugas</div>
@@ -260,6 +305,7 @@
                     <th class="nowrap" style="width:40px;">No</th>
                     <th>Petugas</th>
                     <th class="nowrap right" style="width:120px;">Jumlah SPT</th>
+                    <th class="nowrap right" style="width:140px;">Total Biaya</th>
                 </tr>
             </thead>
             <tbody>
@@ -268,10 +314,11 @@
                         <td class="center nowrap">{{ $i + 1 }}</td>
                         <td>{{ $rp['nama'] ?? '-' }} <span class="nowrap">({{ $rp['nip'] ?? '-' }})</span></td>
                         <td class="right nowrap">{{ number_format($rp['jumlah'] ?? 0) }}</td>
+                        <td class="right nowrap">Rp {{ number_format($rp['total_biaya'] ?? 0, 0, ',', '.') }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="3" class="center">Tidak ada data rekap petugas.</td>
+                        <td colspan="4" class="center">Tidak ada data rekap petugas.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -283,28 +330,30 @@
     @endif
 
     {{-- =======================
-        3) CETAK REKAP POKTAN (SAJA / ALL)
+        3) CETAK REKAP TUJUAN / POKTAN
        ======================= --}}
     @if ($jenis === 'poktan' || $jenis === 'all')
-        <div class="section-title">Rekap Poktan</div>
+        <div class="section-title">Rekap Tujuan / Poktan</div>
         <table>
             <thead>
                 <tr>
                     <th class="nowrap" style="width:40px;">No</th>
-                    <th>Poktan</th>
+                    <th>Tujuan</th>
                     <th class="nowrap right" style="width:120px;">Jumlah SPT</th>
+                    <th class="nowrap right" style="width:140px;">Total Biaya</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($rekapPoktan as $i => $rk)
                     <tr>
                         <td class="center nowrap">{{ $i + 1 }}</td>
-                        <td>{{ $rk['nama_poktan'] ?? ($rk['nama'] ?? '-') }}</td>
+                        <td>{{ $rk['nama'] ?? '-' }}</td>
                         <td class="right nowrap">{{ number_format($rk['jumlah'] ?? 0) }}</td>
+                        <td class="right nowrap">Rp {{ number_format($rk['total_biaya'] ?? 0, 0, ',', '.') }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="3" class="center">Tidak ada data rekap poktan.</td>
+                        <td colspan="4" class="center">Tidak ada data rekap tujuan.</td>
                     </tr>
                 @endforelse
             </tbody>

@@ -16,27 +16,64 @@
         $tglBerangkat = $tglBerangkatObj ? $tglBerangkatObj->translatedFormat('d F Y') : '';
         $tglKembali = $tglKembaliObj ? $tglKembaliObj->translatedFormat('d F Y') : '';
 
-        // Di gambar, semua blok pakai tanggal berangkat
-        $tgl = $tglBerangkat;
+        $lamaHari = $tglBerangkatObj && $tglKembaliObj ? $tglBerangkatObj->diffInDays($tglKembaliObj) + 1 : 1;
 
-        // ====== LIST TUJUAN MAKS 2 ======
-        $tujuanArr = is_array($spt->tujuan) ? array_values($spt->tujuan) : [];
-        $poktanArr = is_array($spt->poktan_nama) ? array_values($spt->poktan_nama) : [];
-        $kotaArr = is_array($spt->deskripsi_kota) ? array_values($spt->deskripsi_kota) : [];
-        $lainArr = is_array($spt->deskripsi_lainnya) ? array_values($spt->deskripsi_lainnya) : [];
+        // aturan tanggal:
+        // - jika lebih dari 1 hari -> tanggal tiba & berangkat dikosongkan
+        // - jika 1 hari -> tanggal langsung terisi
+        $tglIsiPerjalanan = $lamaHari > 1 ? '' : $tglBerangkat;
+        $tglIsiKembali = $lamaHari > 1 ? '' : $tglKembali;
 
-        $norm = fn($v) => trim((string) ($v ?? ''));
+        // ====== NORMALISASI ======
+        $norm = function ($val) {
+            if (is_array($val)) {
+                return array_values($val);
+            }
+
+            if (is_string($val)) {
+                $val = trim($val);
+                if ($val === '') {
+                    return [];
+                }
+
+                $decoded = json_decode($val, true);
+                if (is_array($decoded)) {
+                    return array_values($decoded);
+                }
+
+                $val = str_replace(['|'], ';', $val);
+                return array_values(array_filter(array_map('trim', explode(';', $val))));
+            }
+
+            return [];
+        };
+
+        // ====== LIST TUJUAN ======
+        $tujuanArr = $norm($spt->tujuan ?? null);
+        $poktanArr = $norm($spt->poktan_nama ?? null);
+        $kotaArr = $norm($spt->deskripsi_kota ?? null);
+        $lainArr = $norm($spt->deskripsi_lainnya ?? null);
+
+        // fallback ke relasi spt_tujuan
+        if (count($tujuanArr) === 0 && isset($spt->sptTujuan) && $spt->sptTujuan && $spt->sptTujuan->count() > 0) {
+            foreach ($spt->sptTujuan as $row) {
+                $tujuanArr[] = trim((string) ($row->jenis_tujuan ?? ''));
+                $poktanArr[] = $row->poktan_nama ?? null;
+                $kotaArr[] = $row->deskripsi_kota ?? null;
+                $lainArr[] = $row->deskripsi_lainnya ?? null;
+            }
+        }
 
         $destinations = [];
 
         foreach ($tujuanArr as $i => $tj) {
-            $tj = $norm($tj);
+            $tj = trim((string) $tj);
             if ($tj === '') {
                 continue;
             }
 
-            if ($tj === 'kelompok_tani') {
-                $namaPoktan = $norm($poktanArr[$i] ?? '');
+            if ($tj === 'kelompok_tani' || $tj === 'poktan') {
+                $namaPoktan = trim((string) ($poktanArr[$i] ?? ''));
                 if ($namaPoktan === '') {
                     continue;
                 }
@@ -45,45 +82,49 @@
 
                 $destinations[] = [
                     'label' => 'KT. ' . ($pt?->nama_poktan ?? $namaPoktan),
-                    'ketua' => $pt?->ketua ?? '', // ketua poktan
+                    'ketua' => trim((string) ($pt?->ketua ?? '')),
                     'jenis' => 'poktan',
                 ];
             } elseif ($tj === 'kabupaten_kota') {
-                $kota = $norm($kotaArr[$i] ?? '');
+                $kota = trim((string) ($kotaArr[$i] ?? ''));
                 if ($kota === '') {
                     continue;
                 }
 
                 $destinations[] = [
                     'label' => $kota,
-                    'ketua' => '', // bukan poktan
+                    'ketua' => '',
                     'jenis' => 'kota',
                 ];
-            } elseif ($tj === 'lainnya') {
-                $lain = $norm($lainArr[$i] ?? '');
+            } elseif ($tj === 'lainnya' || $tj === 'lain_lain') {
+                $lain = trim((string) ($lainArr[$i] ?? ''));
                 if ($lain === '') {
                     continue;
                 }
 
                 $destinations[] = [
                     'label' => $lain,
-                    'ketua' => '', // bukan poktan
+                    'ketua' => '',
                     'jenis' => 'lainnya',
                 ];
             }
         }
 
-        $destinations = collect($destinations)->unique(fn($d) => $d['label'])->values()->take(2)->all();
+        $destinations = collect($destinations)
+            ->filter(fn($d) => trim((string) ($d['label'] ?? '')) !== '')
+            ->unique(fn($d) => $d['label'])
+            ->values()
+            ->take(2)
+            ->all();
 
         $countTujuan = count($destinations);
 
         $d1 = $destinations[0] ?? ['label' => '', 'ketua' => '', 'jenis' => ''];
         $d2 = $destinations[1] ?? ['label' => '', 'ketua' => '', 'jenis' => ''];
 
-        $tujuan1 = $d1['label'];
-        $tujuan2 = $d2['label'];
+        $tujuan1 = $d1['label'] ?: '................................';
+        $tujuan2 = $d2['label'] ?: '................................';
 
-        // ====== KETUA: poktan -> nama ketua + "Ketua", selain itu titik saja ======
         $dotsKetua = '................................';
 
         $isPoktan1 = $d1['jenis'] === 'poktan';
@@ -92,9 +133,9 @@
         $ketua1 = $isPoktan1 ? (trim((string) ($d1['ketua'] ?? '')) ?: $dotsKetua) : $dotsKetua;
         $ketua2 = $isPoktan2 ? (trim((string) ($d2['ketua'] ?? '')) ?: $dotsKetua) : $dotsKetua;
 
-        $tujuanSetelah1 = $tujuan2 ?: $tempatAwal;
+        $tujuanSetelah1 = $countTujuan >= 2 ? $tujuan2 : $tempatAwal;
 
-        // ====== NOMOR ======
+        // ====== PENOMORAN ======
         $noI = 'I.';
         $noII = 'II.';
         $noIII = 'III.';
@@ -105,13 +146,21 @@
         $noVIII = 'VIII.';
 
         if ($countTujuan < 2) {
-            $noIII = 'III.'; // dipakai untuk ROW IV (kosong)
-            $noIV = 'IV.'; // dipakai untuk ROW V (kosong)
-            $noV = 'V.'; // dipakai untuk ROW VI (penutup)
-            $noVI = 'VI.'; // Catatan Lain-lain
-            $noVII = 'VII.'; // PERHATIAN
-            $noVIII = 'VIII.'; // (tetap sesuai layout kamu)
+            $noIII = 'III.';
+            $noIV = 'IV.';
+            $noV = 'V.';
+            $noVI = 'VI.';
+            $noVII = 'VII.';
+            $noVIII = 'VIII.';
         }
+
+        // ====== PEJABAT ======
+        $pejabat = \App\Models\User::where(function ($q) {
+            $q->where('jabatan', 'ketua')->orWhere('role', 'ketua');
+        })->first();
+
+        $namaPejabat = $pejabat?->nama ?? ($pejabat?->name ?? '-');
+        $nipPejabat = $pejabat?->nip ?? '-';
     @endphp
 
     <style>
@@ -149,7 +198,6 @@
             line-height: 1.15;
         }
 
-        /* Supaya posisi nama/ketua seperti gambar (agak ke bawah dan center) */
         .sppd-wrap .ttd-spacer {
             height: 36px;
         }
@@ -172,20 +220,6 @@
             margin-top: 4px;
         }
     </style>
-
-    @php
-        $user = $user ?? auth()->user();
-
-        // Pejabat
-        $namaPejabat = $user->nama ?? ($user->name ?? '-');
-        $nipPejabat = $user->nip ?? '-';
-        $jabatanPejabat = $user->jabatan ?? 'Pejabat Pembuat Komitmen';
-
-        // Bendahara
-        $namaBendahara = $user->bendahara_nama ?? '-';
-        $nipBendahara = $user->bendahara_nip ?? '-';
-        $jabatanBendahara = $user->bendahara_jabatan ?? 'Bendahara';
-    @endphp
 
     <table class="main-table" width="100%" cellspacing="0" border="1">
         <!-- ===================== ROW I ===================== -->
@@ -212,7 +246,7 @@
                                 <tr>
                                     <td>Pada tanggal</td>
                                     <td class="mid">:</td>
-                                    <td>{{ $tgl }}</td>
+                                    <td>{{ $tglIsiPerjalanan }}</td>
                                 </tr>
                             </table>
 
@@ -222,7 +256,6 @@
                             <div class="nip" style="white-space: pre;">NIP. {{ $nipPejabat }}</div>
 
                             <div class="ttd-spacer"></div>
-
                             <div class="ttd-center"></div>
                         </td>
                     </tr>
@@ -246,7 +279,7 @@
                                 <tr>
                                     <td>Pada Tanggal</td>
                                     <td class="mid">:</td>
-                                    <td>{{ $tgl }}</td>
+                                    <td>{{ $tglIsiPerjalanan }}</td>
                                 </tr>
                                 <tr>
                                     <td>Pejabat Berwenang *)</td>
@@ -288,7 +321,7 @@
                                 <tr>
                                     <td>Pada tanggal</td>
                                     <td class="mid">:</td>
-                                    <td>{{ $tgl }}</td>
+                                    <td>{{ $tglIsiPerjalanan }}</td>
                                 </tr>
                                 <tr>
                                     <td>Pejabat Berwenang *)</td>
@@ -319,7 +352,7 @@
                 <td width="50%">
                     <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
-                            <td class="no">{{ 'III.' }}</td>
+                            <td class="no">III.</td>
                             <td>
                                 <table width="100%" cellpadding="0" cellspacing="0">
                                     <tr>
@@ -330,7 +363,7 @@
                                     <tr>
                                         <td>Pada Tanggal</td>
                                         <td class="mid">:</td>
-                                        <td>{{ $tgl }}</td>
+                                        <td>{{ $tglIsiPerjalanan }}</td>
                                     </tr>
                                     <tr>
                                         <td>Pejabat Berwenang *)</td>
@@ -372,7 +405,7 @@
                                     <tr>
                                         <td>Pada tanggal</td>
                                         <td class="mid">:</td>
-                                        <td>{{ $tgl }}</td>
+                                        <td>{{ $tglIsiPerjalanan }}</td>
                                     </tr>
                                     <tr>
                                         <td>Pejabat Berwenang *)</td>
@@ -536,7 +569,7 @@
                                 <tr>
                                     <td>Pada tanggal</td>
                                     <td class="mid">:</td>
-                                    <td>{{ $tglKembali ?: $tgl }}</td>
+                                    <td>{{ $tglIsiKembali }}</td>
                                 </tr>
                             </table>
 
@@ -547,7 +580,6 @@
                             <div class="nip" style="white-space: pre;">NIP. {{ $nipPejabat }}</div>
 
                             <div class="ttd-spacer"></div>
-
                             <div class="ttd-center"></div>
                         </td>
                     </tr>
@@ -565,7 +597,6 @@
                 <div class="nip" style="white-space: pre;">NIP. {{ $nipPejabat }}</div>
 
                 <div class="ttd-spacer"></div>
-
                 <div class="ttd-center"></div>
             </td>
         </tr>

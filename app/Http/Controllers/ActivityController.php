@@ -9,42 +9,42 @@ use Illuminate\Support\Facades\Auth;
 class ActivityController extends Controller
 {
     /**
-     * Ambil list aktivitas (untuk navbar).
-     * Default: 5 terakhir.
+     * Ambil list aktivitas untuk navbar/dropdown.
+     * Default: 5 terakhir, maksimum 20.
      */
     public function navbar(Request $request)
     {
-        $limit = (int) ($request->get('limit', 5));
+        $limit = (int) $request->get('limit', 5);
         $limit = $limit > 0 ? min($limit, 20) : 5;
 
-        $userId = Auth::id(); // ✅ aman (tidak bikin error intelephense)
+        $userId = Auth::id();
 
         $activities = Activity::query()
-            ->when($userId, fn($q) => $q->where('user_id', $userId))
+            ->when($userId, function ($q) use ($userId) {
+                $q->where('user_id', $userId);
+            })
             ->latest()
             ->take($limit)
             ->get();
 
-        // Kalau kamu mau dipakai AJAX/JSON:
         if ($request->wantsJson()) {
             return response()->json($activities);
         }
 
-        // Kalau kamu mau dipakai sebagai partial view navbar:
-        // bikin view: resources/views/partials/activity_dropdown.blade.php
         return view('partials.activity_dropdown', compact('activities'));
     }
 
     /**
-     * Halaman list aktivitas (kalau suatu saat butuh).
-     * (boleh tidak dipakai)
+     * Halaman daftar aktivitas.
      */
     public function index()
     {
         $userId = Auth::id();
 
         $activities = Activity::query()
-            ->when($userId, fn($q) => $q->where('user_id', $userId))
+            ->when($userId, function ($q) use ($userId) {
+                $q->where('user_id', $userId);
+            })
             ->latest()
             ->paginate(15);
 
@@ -52,15 +52,24 @@ class ActivityController extends Controller
     }
 
     /**
-     * Hapus semua aktivitas user (tombol "Hapus Aktivitas").
+     * Hapus semua aktivitas user yang sedang login.
      */
-    public function clear()
+    public function clear(Request $request)
     {
         $userId = Auth::id();
 
         Activity::query()
-            ->when($userId, fn($q) => $q->where('user_id', $userId))
+            ->when($userId, function ($q) use ($userId) {
+                $q->where('user_id', $userId);
+            })
             ->delete();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Aktivitas berhasil dihapus.',
+            ]);
+        }
 
         return back()->with('success', 'Aktivitas berhasil dihapus.');
     }

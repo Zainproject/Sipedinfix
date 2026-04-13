@@ -3,15 +3,10 @@
 
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login - SIPEDIN</title>
 
-    <!-- Fonts -->
     <link href="{{ asset('vendor/fontawesome-free/css/all.min.css') }}" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css?family=Nunito:200,300,400,600,700,800,900" rel="stylesheet">
-
-    <!-- SB Admin 2 -->
     <link href="{{ asset('css/sb-admin-2.min.css') }}" rel="stylesheet">
 
     <style>
@@ -30,7 +25,6 @@
             font-family: "Nunito", sans-serif;
         }
 
-        /* BACKGROUND */
         .bg-gradient-primary {
             background:
                 radial-gradient(1000px 500px at 20% 10%, rgba(43, 182, 115, .25), transparent 60%),
@@ -38,7 +32,6 @@
                 linear-gradient(135deg, #0b3d2e, #1f9d62);
         }
 
-        /* LOGIN CARD */
         .login-card {
             width: 100%;
             max-width: 420px;
@@ -54,14 +47,6 @@
             }
         }
 
-        @media (max-width: 575.98px) {
-            .login-card {
-                max-width: 100%;
-                margin: 0 16px;
-            }
-        }
-
-        /* HEADER */
         .login-header {
             background: linear-gradient(135deg, var(--siped-700), var(--siped-500));
             color: #fff;
@@ -69,42 +54,13 @@
             text-align: center;
         }
 
-        @media (max-width: 575.98px) {
-            .login-header {
-                padding: 36px 24px;
-            }
-        }
-
-        .login-header .badge {
-            background: rgba(255, 255, 255, .22);
-            font-weight: 700;
-            padding: .45rem .9rem;
-            border-radius: 999px;
-        }
-
         .login-header h1 {
             font-weight: 900;
             font-size: 2rem;
-            margin-top: 18px;
-            margin-bottom: 6px;
-            letter-spacing: .6px;
         }
 
-        .login-header p {
-            opacity: .9;
-            font-size: .95rem;
-            margin-bottom: 0;
-        }
-
-        /* BODY */
         .login-body {
             padding: 48px 44px 36px;
-        }
-
-        @media (max-width: 575.98px) {
-            .login-body {
-                padding: 36px 28px 28px;
-            }
         }
 
         .brand-logo {
@@ -115,7 +71,6 @@
             background: #fff;
             padding: 10px;
             box-shadow: 0 12px 25px rgba(0, 0, 0, .12);
-            border: 1px solid rgba(0, 0, 0, .06);
         }
 
         .form-control-user {
@@ -141,30 +96,19 @@
             background: linear-gradient(135deg, var(--siped-700), var(--siped-500));
             border: none;
         }
-
-        .btn-siped:hover {
-            filter: brightness(.97);
-        }
     </style>
 </head>
 
 <body class="bg-gradient-primary">
 
     <div class="login-card">
-
-        <!-- HEADER -->
         <div class="login-header">
-            <span class="badge">
-                <i class="fas fa-file-signature mr-1"></i> Aplikasi Persuratan & Perintah Dinas
-            </span>
             <h1>SIPEDIN</h1>
             <p>Sistem Informasi Perintah Dinas</p>
         </div>
 
-        <!-- BODY -->
         <div class="login-body text-center">
-
-            <img src="{{ asset('img/sumenep.png') }}" class="brand-logo mb-4" alt="Logo Instansi">
+            <img src="{{ asset('img/sumenep.png') }}" class="brand-logo mb-4" alt="Logo">
 
             @if ($errors->any())
                 <div class="alert alert-danger small text-left">
@@ -177,7 +121,7 @@
             @endif
 
             @if (session('status'))
-                <div class="alert alert-success small">
+                <div class="alert alert-success small text-left">
                     {{ session('status') }}
                 </div>
             @endif
@@ -187,19 +131,27 @@
 
                 <div class="form-group">
                     <label class="small font-weight-bold text-gray-700">Email</label>
-                    <input type="email" class="form-control form-control-user" name="email"
+                    <input type="email" name="email" value="{{ old('email') }}"
+                        class="form-control form-control-user @error('email') is-invalid @enderror"
                         placeholder="nama@instansi.go.id" required>
+                    @error('email')
+                        <div class="text-danger small">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="form-group">
                     <label class="small font-weight-bold text-gray-700">Kata Sandi</label>
-                    <input type="password" class="form-control form-control-user" name="password"
+                    <input type="password" name="password"
+                        class="form-control form-control-user @error('password') is-invalid @enderror"
                         placeholder="Masukkan kata sandi" required>
+                    @error('password')
+                        <div class="text-danger small">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="form-group d-flex justify-content-between align-items-center">
                     <div class="custom-control custom-checkbox small">
-                        <input type="checkbox" class="custom-control-input" id="remember_me">
+                        <input type="checkbox" class="custom-control-input" id="remember_me" name="remember">
                         <label class="custom-control-label" for="remember_me">
                             Ingat saya
                         </label>
@@ -218,17 +170,10 @@
             <hr>
 
             <div class="small text-muted">
-                © {{ date('Y') }} SIPEDIN • Instansi/Unit Kerja
+                © {{ date('Y') }} SIPEDIN
             </div>
-
         </div>
     </div>
-
-    <!-- JS -->
-    <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
-    <script src="{{ asset('vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
-    <script src="{{ asset('vendor/jquery-easing/jquery.easing.min.js') }}"></script>
-    <script src="{{ asset('js/sb-admin-2.min.js') }}"></script>
 
 </body>
 
