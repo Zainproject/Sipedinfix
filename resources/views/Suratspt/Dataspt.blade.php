@@ -231,6 +231,10 @@
                                                 title="Print">
                                                 <i class="fas fa-print"></i>
                                             </a>
+                                            {{-- <a href="{{ route('spt.downloadWord', $spt->id) }}"
+                                                class="btn btn-sm btn-success">
+                                                <i class="fas fa-file-word"></i> Word
+                                            </a> --}}
 
                                             <form action="{{ route('spt.destroy', $spt->id) }}" method="POST"
                                                 class="d-inline">

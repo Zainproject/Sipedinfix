@@ -27,13 +27,23 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
         $request->session()->regenerate();
-
-        // ✅ Flash pesan selamat datang (dipakai oleh navbar)
-        // Biar muncul sekali setelah login lalu hilang otomatis
         $request->session()->flash('login_success', true);
 
-        // ✅ arahkan ke home (/index) atau intended page
-        return redirect()->intended(route('home'));
+        $user = Auth::user();
+
+        if ($user->role === 'ketua') {
+            return redirect()->route('home');
+        }
+
+        if ($user->role === 'sekretaris') {
+            return redirect()->route('home');
+        }
+
+        if ($user->role === 'bendahara') {
+            return redirect()->route('home');
+        }
+
+        return redirect()->route('home');
     }
 
     /**
